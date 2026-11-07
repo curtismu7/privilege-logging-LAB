@@ -23,7 +23,7 @@ export function createWorkspaces({ max = 500, ttlMs = 60 * 60 * 1000, now = Date
     state(id) {
       sweep();
       let v = map.get(id);
-      if (!v) { v = { runs: new Map(), confirmed: null, at: now() }; map.set(id, v); }
+      if (!v) { v = { runs: new Map(), confirmed: null, bearers: new Map(), at: now() }; map.set(id, v); }
       v.at = now();
       return v;
     },

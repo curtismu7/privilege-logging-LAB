@@ -10,7 +10,7 @@
       "composeFile": "privilege-logging-LAB/docker-compose.yml",
       "composeOverlays": [],
       "pingProducts": [],
-      "notes": "Host-run: ./scripts/run.sh (port 7801). Mock needs no tenant, key or network. Docker: HOST_PORT=7801 docker compose up --build -d (published on 127.0.0.1 only; Mock by default). Real: set PRIV_LOG_GATEWAY_URL and PRIV_LOG_AGENT_KEY (and optionally PRIV_LOG_SEARCH_URL, PRIV_LOG_SEARCH_INDEX) in ~/Development/.env, then use the Real toggle and confirm the origins. No catalog row matches yet, so no catalogId; the owner assigns one with the board row.",
+      "notes": "Host-run: ./scripts/run.sh (port 7801). Mock needs no tenant, key or network. Docker: HOST_PORT=7801 docker compose up --build -d (published on 127.0.0.1 only; Mock by default). Real: set PRIV_LOG_GATEWAY_URL and PRIV_LOG_AGENT_KEY (and optionally PRIV_LOG_SEARCH_URL, PRIV_LOG_SEARCH_INDEX) in ~/Development/.env, add PRIV_LOG_K8S_NAMESPACE and PRIV_LOG_K8S_POD (run `kubectl proxy`) or PRIV_LOG_SEARCH_URL for automatic log retrieval, then use the Real toggle and confirm the origins. 17 more cases (Keys, Federated identity, Approvals, Registry lifecycle) are Real-only and not measured yet. No catalog row matches yet, so no catalogId; the owner assigns one with the board row.",
       "repo": "https://github.com/curtismu7/privilege-logging-LAB",
       "tags": [
         "pingone-privilege",

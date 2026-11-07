@@ -8,10 +8,11 @@ import express from 'express';
 import { hostCheck, sameOriginWrites } from './safety.js';
 import { createHealth } from './health.js';
 import { loadCapture } from './capture.js';
-import { modeFrom, realConfig } from './config.js';
+import { bearerFromSettings, modeFrom, realConfig } from './config.js';
 import { RealError, createRealClient } from './realClient.js';
 import { setAllowedHosts } from './netguard.js';
-import { EXTRA_SINKS, attachPasted, caseSummary, mockRun, realRun, scorePasted, scorecardRows, toMarkdown } from './lab.js';
+import { EXTRA_SINKS, REAL_ONLY_NOTE, attachPasted, caseSummary, fetchAttempt, mockFetch, mockSend, realSend, scorePasted, scorecardRows, toMarkdown } from './lab.js';
+import { sourcesFrom } from './logSources.js';
 import { parsePaste } from './logparse.js';
 import { buildStory } from './story.js';
 import { DIAGRAM_NAMES, buildDiagram } from './diagramData.js';
@@ -23,7 +24,8 @@ const WEB_DIST = process.env.WEB_DIST || path.resolve(HERE, '../../web/dist');
 
 export function createApp({
   health = createHealth(), env = process.env, useSettingsFile = true, now = Date.now, workspaces = createWorkspaces({ now }),
-  capture = loadCapture(), lookup, realTimeoutMs, sleep,
+  capture = loadCapture(), lookup, realTimeoutMs, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  retryMs = 1000, maxMs = 15_000, fallbackMs = 4000, mockDelayMs = 600,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -34,13 +36,18 @@ export function createApp({
   const settingsOpts = { file: useSettingsFile };
   const cfg = () => realConfig(env, settingsOpts); // read on every call: editing the settings file shows up without a restart
   let mode = modeFrom(env, settingsOpts);
-  const syncGuard = () => { const c = cfg(); setAllowedHosts(mode === 'real' && c.ok ? [c.gateway.host, ...(c.search ? [c.search.host] : [])] : []); };
+  const syncGuard = () => { const c = cfg(); setAllowedHosts(mode === 'real' && c.ok ? [c.gateway.host, ...sourcesFrom(c).map((x) => x.host)] : []); };
+  const limits = { intervalMs: retryMs, maxMs, fallbackMs };
   syncGuard();
   health.setRuntime?.(() => (mode === 'real' ? 'live' : 'offline'));
 
-  const byId = new Map(capture.cases.map((c) => [c.id, c]));
-  const clientFor = (c) => createRealClient({ origins: [c.gateway.origin, ...(c.search ? [c.search.origin] : [])], secrets: [c.key], lookup, timeoutMs: realTimeoutMs, now });
-  const signature = (c) => `${c.gateway.origin}|${c.search ? c.search.origin : ''}`;
+  const allCases = [...capture.cases, ...(capture.realOnly || [])];
+  const byId = new Map(allCases.map((c) => [c.id, c]));
+  const clientFor = (c, bearer) => createRealClient({ origins: [c.gateway.origin, ...sourcesFrom(c).map((x) => x.origin)], secrets: [c.key, bearer].filter(Boolean), lookup, timeoutMs: realTimeoutMs, now });
+  const signature = (c) => `${c.gateway.origin}|${c.search ? c.search.origin : ''}|${c.k8s ? c.k8s.origin : ''}`;
+  // A per-case credential only the owner has: the write-only field (this tab) wins over PRIV_LOG_BEARER_<CASEID>. Never returned by any API.
+  const bearerOf = (ws, id) => workspaces.state(ws).bearers.get(id) || bearerFromSettings(id, env, settingsOpts);
+  const sourcesInfo = (c) => (c.ok ? sourcesFrom(c).map((x) => ({ id: x.id, label: x.label, origin: x.origin })) : []);
 
   const api = express.Router();
   api.use(express.json({ limit: '300kb' }));
@@ -69,7 +76,8 @@ export function createApp({
       mode, source: mode, simulated: mode === 'mock', realAvailable: c.ok, realHint: c.ok ? null : c.problem,
       keyConfigured: c.ok, // presence only; the key itself is write-only and never returned
       searchConfigured: c.ok && !!c.search, capturedOn: capture.capturedOn, caseCount: capture.cases.length,
-      real: c.ok ? { gatewayOrigin: c.gateway.origin, searchOrigin: c.search ? c.search.origin : null, index: c.index, confirmed } : null,
+      retrieval: { ...limits, mockDelayMs, sources: sourcesInfo(c) },
+      real: c.ok ? { gatewayOrigin: c.gateway.origin, searchOrigin: c.search ? c.search.origin : null, k8sOrigin: c.k8s ? c.k8s.origin : null, k8sTarget: c.k8s ? `${c.k8s.namespace}/${c.k8s.pod || c.k8s.selector}:${c.k8s.container}` : null, index: c.index, confirmed } : null,
     });
   }));
   // Rule 19: exactly { source: "mock"|"real" }; 409 when Real is not configured.
@@ -84,7 +92,18 @@ export function createApp({
   });
 
   api.get('/story', (_req, res) => { noStore(res); res.json(buildStory(capture)); });
-  api.get('/cases', (_req, res) => { noStore(res); res.json({ groups: [...new Set(capture.cases.map((c) => c.group))], cases: capture.cases.map(caseSummary) }); });
+  api.get('/cases', withWorkspace((ws, _req, res) => res.json({ groups: [...new Set(allCases.map((c) => c.group))], cases: allCases.map((c) => caseSummary(c, { bearerConfigured: !!bearerOf(ws, c.id) })) })));
+  // A write-only credential for one case (a revoked key, a federated token). Stored in memory for this tab only; the answer says only whether one is set.
+  api.post('/bearer', withWorkspace((ws, req, res) => {
+    if (!exactBody(req.body, ['caseId', 'bearer']) || typeof req.body.caseId !== 'string' || typeof req.body.bearer !== 'string') return res.status(400).json({ error: 'bad_request', detail: 'body must be { caseId, bearer }' });
+    const c = byId.get(req.body.caseId);
+    if (!c || c.request.auth !== 'bearer') return res.status(404).json({ error: 'unknown_case', detail: 'that case does not take a bearer' });
+    const b = req.body.bearer.trim();
+    if (b.length > 2048 || /[\s\u0000-\u001f]/.test(b)) return res.status(400).json({ error: 'bad_bearer', detail: 'a bearer is up to 2048 characters with no spaces or control characters' });
+    const st = workspaces.state(ws);
+    if (b) st.bearers.set(c.id, b); else st.bearers.delete(c.id);
+    return res.json({ caseId: c.id, configured: !!bearerOf(ws, c.id) });
+  }));
   api.get('/sinks', (_req, res) => {
     noStore(res);
     // Per sink, from the capture: how many cases it was read for, how many held lines, and how many lines in all.
@@ -108,25 +127,31 @@ export function createApp({
     return res.json({ confirmed: true, gatewayOrigin: c.gateway.origin, searchOrigin: c.search ? c.search.origin : null });
   }));
 
+  // Phase 1 of a run: send (Real) or look up the recording (Mock). The log entry is fetched by phase 2 (/api/fetch-log).
   api.post('/run', withWorkspace(async (ws, req, res) => {
-    if (!exactBody(req.body, ['caseId', 'waitMs']) || typeof req.body.caseId !== 'string') return res.status(400).json({ error: 'bad_request', detail: 'body must be { caseId, waitMs? }' });
+    if (!exactBody(req.body, ['caseId', 'since']) || typeof req.body.caseId !== 'string') return res.status(400).json({ error: 'bad_request', detail: 'body must be { caseId, since? }' });
     const c = byId.get(req.body.caseId);
     if (!c) return res.status(404).json({ error: 'unknown_case' });
-    const waitMs = req.body.waitMs === undefined ? 1500 : req.body.waitMs;
-    if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 10_000) return res.status(400).json({ error: 'bad_request', detail: 'waitMs must be a whole number 0-10000' });
+    let since = null;
+    if (req.body.since !== undefined) {
+      since = typeof req.body.since === 'string' ? Date.parse(req.body.since) : NaN;
+      if (!Number.isFinite(since) || since > now() + 60_000 || since < now() - 86_400_000) return res.status(400).json({ error: 'bad_since', detail: 'since must be an ISO time within the last 24 hours' });
+    }
     if (mode === 'mock') {
-      const result = mockRun(c, capture);
+      if (c.realOnly) return res.status(409).json({ error: 'real_only', detail: REAL_ONLY_NOTE });
+      const result = mockSend(c, capture);
       workspaces.putRun(ws, result);
       return res.json(result);
     }
     const conf = cfg();
     if (!conf.ok) return res.status(409).json({ error: 'real_not_configured', detail: conf.problem });
     if (workspaces.state(ws).confirmed !== signature(conf)) {
-      return res.status(412).json({ error: 'confirm_required', detail: 'Real mode sends requests to your gateway. Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null });
+      return res.status(412).json({ error: 'confirm_required', detail: 'Real mode sends requests to your gateway. Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null });
     }
-    const client = clientFor(conf);
+    const bearer = c.request.auth === 'bearer' ? bearerOf(ws, c.id) : undefined;
+    const client = clientFor(conf, bearer);
     try {
-      const result = await realRun(c, { client, cfg: conf, waitMs, now, ...(sleep ? { sleep } : {}) });
+      const result = await realSend(c, { client, cfg: conf, bearer, now, since });
       workspaces.putRun(ws, result);
       return res.json(result);
     } catch (e) {
@@ -136,6 +161,30 @@ export function createApp({
       }
       throw e;
     }
+  }));
+
+  // Phase 2: ONE attempt to fetch the call's log entry. The page repeats it about once a second while the answer is retrieval.state "pending".
+  api.post('/fetch-log', withWorkspace(async (ws, req, res) => {
+    if (!exactBody(req.body, ['caseId', 'restart']) || typeof req.body.caseId !== 'string' || (req.body.restart !== undefined && typeof req.body.restart !== 'boolean')) return res.status(400).json({ error: 'bad_request', detail: 'body must be { caseId, restart? }' });
+    const c = byId.get(req.body.caseId);
+    if (!c) return res.status(404).json({ error: 'unknown_case' });
+    const run = workspaces.getRun(ws, mode, c.id);
+    if (!run) return res.status(409).json({ error: 'no_run', detail: 'Run the case first.' });
+    if (mode === 'mock') {
+      if (run.scored) return res.json(run);
+      if (mockDelayMs > 0) await sleep(mockDelayMs); // a short fixed simulated delay, so Mock shows the same two phases as Real
+      const out = mockFetch(run, c, capture);
+      workspaces.putRun(ws, out);
+      return res.json(out);
+    }
+    const conf = cfg();
+    if (!conf.ok) return res.status(409).json({ error: 'real_not_configured', detail: conf.problem });
+    if (workspaces.state(ws).confirmed !== signature(conf)) return res.status(412).json({ error: 'confirm_required', detail: 'Confirm the origins first.' });
+    const bearer = c.request.auth === 'bearer' ? bearerOf(ws, c.id) : undefined;
+    const client = clientFor(conf, bearer);
+    const out = await fetchAttempt(run, c, { client, cfg: conf, now, limits, restart: req.body.restart === true });
+    workspaces.putRun(ws, out);
+    return res.json(out);
   }));
 
   // Pure scoring of pasted lines (works in both modes). With a caseId in Real mode and an existing run, the lines are attached to that run.

@@ -1,40 +1,79 @@
-import { LevelChip, Chip } from "./Chips";
+import { useState } from "react";
+import Busy from "./Busy";
+import { Chip, LevelChip } from "./Chips";
 
 const summary = (r) => [r.method, r.tool, r.app && `app ${r.app}`, r.model && `model ${r.model}`].filter(Boolean).join(" · ");
+const MOCK_ONLY_NOTE = "No recorded measurement yet. Real mode only.";
+// A local datetime-local value for "15 minutes ago"
+const ago = (min) => { const d = new Date(Date.now() - min * 60_000); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 
-export default function RunPage({ cases, runs, info, running, onRun, onRunAll, onOpen }) {
+function BearerField({ c, onBearer }) {
+  const [v, setV] = useState("");
+  return (
+    <div className="bearer" data-testid={`bearer-${c.id}`}>
+      <label htmlFor={`bearer-in-${c.id}`} className="muted">Credential for this case (write-only: never shown, never logged)</label>
+      <div className="row">
+        <input id={`bearer-in-${c.id}`} type="password" autoComplete="off" spellCheck="false" value={v} onChange={(e) => setV(e.target.value)} placeholder={c.bearerConfigured ? "set; paste a new one to replace" : "paste a bearer token"} data-testid={`bearer-input-${c.id}`} />
+        <button type="button" onClick={async () => { if (await onBearer(c.id, v.trim())) setV(""); }} disabled={!v.trim()} data-testid={`bearer-set-${c.id}`}>Set</button>
+        {c.bearerConfigured && <><Chip kind="ok" testId={`bearer-on-${c.id}`}>credential set</Chip><button type="button" onClick={() => onBearer(c.id, "")} data-testid={`bearer-clear-${c.id}`}>Clear</button></>}
+      </div>
+    </div>
+  );
+}
+
+export default function RunPage({ cases, runs, info, running, busy = {}, onRun, onLook, onRetry, onBearer, onRunAll, onOpen }) {
   const real = info?.source === "real";
-  const runnable = (c) => !real || c.realRunnable;
+  const [since, setSince] = useState(ago(15));
+  const mode = real ? "real" : "mock";
+  const runnable = (c) => (real ? c.realRunnable : !c.realOnly);
+  const sources = info?.retrieval?.sources || [];
   return (
     <div data-testid="run-page">
       <div className="row row--between">
-        <p className="lede">{real ? "Real: each Run sends the case to your gateway, then reads the log back." : "Mock: each Run replays a transaction measured on the capture date. Nothing is sent."}</p>
-        <button type="button" className="primary" onClick={onRunAll} disabled={!!running} data-testid="run-all">Run all{real ? " runnable" : ""} ({cases.cases.filter(runnable).length})</button>
+        <p className="lede">{real ? `Real: each Run sends the case to your gateway, then fetches the log entry${sources.length ? ` from ${sources.map((s) => s.label).join(" and ")}` : ""}. ${sources.length ? "" : "No log source is configured: you will paste the lines."}` : "Mock: each Run replays a transaction measured on the capture date, then shows its recorded log entry. Nothing is sent."}</p>
+        <button type="button" className="primary" onClick={onRunAll} disabled={!!running} data-testid="run-all">Run all{real ? " runnable" : ""} ({cases.cases.filter((c) => (real ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).length})</button>
       </div>
       {cases.groups.map((g) => (
         <section key={g} aria-labelledby={`grp-${g}`}>
-          <h2 id={`grp-${g}`} className="section-label">{g}</h2>
+          <h2 id={`grp-${g}`} className="section-label">{g}{cases.cases.find((c) => c.group === g)?.realOnly ? " · not measured yet" : ""}</h2>
           <div className="card-grid">
             {cases.cases.filter((c) => c.group === g).map((c) => {
-              const r = runs[c.id];
+              const r = runs[c.id]; const b = busy[c.id];
+              const active = b && (b.phase === "sending" || b.phase === "fetching");
+              const mockOnlyBlock = !real && c.realOnly;
               return (
-                <article key={c.id} className="card" data-testid={`case-${c.id}`}>
+                <article key={c.id} className="card" data-testid={`case-${c.id}`} aria-busy={active ? "true" : "false"}>
                   <h3 className="card__title">{c.title}</h3>
                   <p className="muted">{c.identity}</p>
                   <p><code>{summary(c.request)}</code></p>
+                  {c.realOnly && <p className="muted" data-testid={`needs-${c.id}`}><Chip kind="warn">not measured</Chip> Needs: {c.needs.join("; ")}</p>}
+                  {mockOnlyBlock && <p className="muted" data-testid={`mockonly-${c.id}`}>{MOCK_ONLY_NOTE}</p>}
                   {real && c.realRunnable && /signed-in/i.test(c.identity) && <p className="muted" data-testid={`ident-${c.id}`}>Real sends this with the agent key (this tool has no user sign-in), so the identity differs from the measured case.</p>}
                   {real && !c.realRunnable && <p className="muted" data-testid={`note-${c.id}`}>Not runnable in Real: {c.realNote}</p>}
+                  {real && c.needsBearer && <BearerField c={c} onBearer={onBearer} />}
+                  {real && c.consoleAction && (
+                    <div className="row">
+                      <label htmlFor={`since-${c.id}`} className="muted">Look for entries since</label>
+                      <input id={`since-${c.id}`} type="datetime-local" value={since} onChange={(e) => setSince(e.target.value)} data-testid={`since-${c.id}`} />
+                    </div>
+                  )}
                   <div className="row">
-                    <button type="button" className="primary" onClick={() => onRun(c.id)} disabled={!!running || !runnable(c)} data-testid={`run-${c.id}`} title={runnable(c) ? "" : c.realNote}>
-                      {running === c.id ? "Running..." : r ? "Run again" : "Run"}
-                    </button>
+                    {real && c.consoleAction ? (
+                      <button type="button" className="primary" onClick={() => onLook(c.id, new Date(since).toISOString())} disabled={!!running || !since} data-testid={`run-${c.id}`}>{active ? "Looking..." : "Look for entries"}</button>
+                    ) : (
+                      <button type="button" className="primary" onClick={() => onRun(c.id)} disabled={!!running || !runnable(c) || (real && c.needsBearer && !c.bearerConfigured)} data-testid={`run-${c.id}`}
+                        title={mockOnlyBlock ? MOCK_ONLY_NOTE : !runnable(c) ? c.realNote || "" : real && c.needsBearer && !c.bearerConfigured ? "Set the credential for this case first." : ""}>
+                        {active ? "Running..." : r ? "Run again" : "Run"}
+                      </button>
+                    )}
                     {r && <button type="button" onClick={() => onOpen(c.id)} data-testid={`open-${c.id}`}>Open trace</button>}
-                    {r && <Chip kind={r.outcome.http >= 400 || r.outcome.isError ? "warn" : "ok"}>HTTP {r.outcome.http}</Chip>}
-                    {r && (r.scored ? null : <Chip kind="warn">paste log lines to score</Chip>)}
+                    {r && r.outcome.http !== null && <Chip kind={r.outcome.http >= 400 || r.outcome.isError ? "warn" : "ok"}>HTTP {r.outcome.http}</Chip>}
+                    {r && !r.scored && !b && r.retrieval?.state === "not_configured" && <Chip kind="warn">paste log lines to score</Chip>}
                   </div>
-                  {r && r.scored && (
+                  <Busy id={c.id} b={b} mode={mode} onRetry={onRetry} />
+                  {r && r.scored && !active && (
                     <p className="row" aria-label="score">
-                      {["user", "agent", "tool", "decision"].map((f) => <span key={f} className="ltag"><span className="ltag__name">{f}</span> <LevelChip level={r.score[f]} /></span>)}
+                      {["user", "agent", "tool", "decision"].map((f) => <span key={f} className="ltag"><span className="ltag__name">{f}</span> <LevelChip level={r.score[f]} />{r.scoreInferred?.[f] && <Chip kind="warn">inferred</Chip>}</span>)}
                     </p>
                   )}
                 </article>

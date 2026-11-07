@@ -77,3 +77,36 @@ test('a hostile settings file: an over-long line is skipped, unrelated names are
   assert.ok(Date.now() - t0 < 1000);
   assert.deepEqual(s, { PRIV_LOG_SEARCH_INDEX: 'my index' });
 });
+
+test('Kubernetes pod-log source: proxy URL defaults to loopback 8001, namespace and pod are required together, names are validated, container defaults to log-tailer', () => {
+  const k = (x) => cfg(x);
+  assert.equal(k().k8s, null);
+  const ok = k({ PRIV_LOG_K8S_NAMESPACE: 'privilege', PRIV_LOG_K8S_POD: 'gateway-abc-123' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.k8s.origin, 'http://127.0.0.1:8001'); assert.equal(ok.k8s.container, 'log-tailer'); assert.equal(ok.k8s.pod, 'gateway-abc-123'); assert.equal(ok.k8s.selector, null);
+  const sel = k({ PRIV_LOG_K8S_NAMESPACE: 'privilege', PRIV_LOG_K8S_POD: 'app=privilege-gateway,tier=gw', PRIV_LOG_K8S_CONTAINER: 'gateway', PRIV_LOG_K8S_PROXY_URL: 'http://localhost:9001' });
+  assert.equal(sel.ok, true); assert.equal(sel.k8s.selector, 'app=privilege-gateway,tier=gw'); assert.equal(sel.k8s.pod, null); assert.equal(sel.k8s.container, 'gateway');
+  const bad = [
+    { PRIV_LOG_K8S_NAMESPACE: 'privilege' }, { PRIV_LOG_K8S_POD: 'p' }, { PRIV_LOG_K8S_PROXY_URL: 'http://127.0.0.1:8001' },
+    { PRIV_LOG_K8S_NAMESPACE: 'Bad_NS', PRIV_LOG_K8S_POD: 'p' }, { PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: '../etc' }, { PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: 'a=b;rm -rf' },
+    { PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: 'p', PRIV_LOG_K8S_CONTAINER: 'c/../x' },
+    { PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: 'p', PRIV_LOG_K8S_PROXY_URL: 'http://10.0.0.5:8001' },
+    { PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: 'p', PRIV_LOG_K8S_PROXY_URL: 'http://kube.example:8001' },
+    { PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: 'p', PRIV_LOG_K8S_PROXY_URL: 'http://127.0.0.1:8001/api' },
+    { PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: 'p', PRIV_LOG_K8S_PROXY_URL: 'https://169.254.169.254' },
+  ];
+  for (const b of bad) assert.equal(k(b).ok, false, JSON.stringify(b));
+  assert.equal(k({ PRIV_LOG_K8S_NAMESPACE: 'ns', PRIV_LOG_K8S_POD: 'p', PRIV_LOG_K8S_PROXY_URL: 'https://kube.example' }).ok, true, 'https is allowed');
+});
+
+test('per-case bearers: PRIV_LOG_BEARER_<CASEID> is read from the environment and the settings file, and only that shape', async () => {
+  const { bearerFromSettings, bearerEnvName } = await import('../src/config.js').then(async (m) => ({ ...m, ...(await import('../src/mcpRunner.js')) }));
+  const env = { ...NOENV, PRIV_LOG_BEARER_KEYS_REVOKED: 'tok-1', PRIV_LOG_BEARER_lowercase: 'no', SOMETHING_ELSE: 'no' };
+  assert.equal(bearerFromSettings('keys-revoked', env, { file: false }), 'tok-1');
+  assert.equal(bearerFromSettings('keys-expired', env, { file: false }), undefined);
+  assert.equal(bearerEnvName('fed-lifetime-too-long'), 'FED_LIFETIME_TOO_LONG');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pll-')); const file = path.join(dir, 's.env');
+  fs.writeFileSync(file, 'PRIV_LOG_BEARER_FED_VALID_TOKEN=from-file\nOTHER=x\n');
+  assert.equal(bearerFromSettings('fed-valid-token', { STANDALONE_ENV: file }), 'from-file');
+  fs.rmSync(dir, { recursive: true });
+});

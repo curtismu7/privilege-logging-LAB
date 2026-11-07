@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ConfirmGate from "./components/ConfirmGate";
 import DiagramPage from "./components/DiagramPage";
 import RunPage from "./components/RunPage";
@@ -7,7 +7,7 @@ import ShelfLink from "./components/ShelfLink";
 import SinksPage from "./components/SinksPage";
 import TalkTrack from "./components/TalkTrack";
 import TracePage from "./components/TracePage";
-import { confirmGateway, getJson, resetWorkspace, runCase, setMode } from "./api";
+import { confirmGateway, fetchLog, getJson, resetWorkspace, runCase, setBearer, setMode } from "./api";
 import { THEMES, applyTheme, savedTheme } from "./theme";
 
 export const TABS = [
@@ -41,6 +41,8 @@ export default function App() {
   const [running, setRunning] = useState(null);
   const [gate, setGate] = useState(null); // { gatewayOrigin, searchOrigin, queue }
   const [signal, setSignal] = useState(0);
+  const [busy, setBusy] = useState({}); // caseId -> { phase: sending|fetching|timeout|unreachable|error, attempt, elapsedMs, maxMs, detail }
+  const epoch = useRef(0); // bumped by Reset and by a mode switch: a polling loop that sees a newer epoch stops
 
   const loadInfo = useCallback(() => getJson("/api/info").then(setInfo, () => setInfo(null)), []);
   const loadRuns = useCallback(() => getJson("/api/runs").then((r) => setRuns(Object.fromEntries(r.runs.map((x) => [x.caseId, x]))), () => {}), []);
@@ -67,37 +69,72 @@ export default function App() {
   const go = (tab, caseId = null) => { setNav({ tab, caseId }); try { window.history.replaceState(null, "", `#${tab}${caseId ? `/${caseId}` : ""}`); } catch { /* ignore */ } };
   const selected = nav.caseId && cases?.cases.some((c) => c.id === nav.caseId) ? nav.caseId : (cases?.cases[0]?.id ?? null);
 
-  // Run one case. Returns "ok", "confirm" (the confirm gate was raised), or "stop" (an error was shown).
-  const doRun = useCallback(async (id) => {
-    setRunning(id); setNotice("");
-    try {
-      const res = await runCase(id);
-      if (res.status === 412) { setGate({ gatewayOrigin: res.body.gatewayOrigin, searchOrigin: res.body.searchOrigin, queue: [id] }); return "confirm"; }
-      if (!res.ok) { setNotice(`${id}: ${res.body.detail || res.body.error || "failed"}`); if (res.body.hops?.length) setRuns((r) => ({ ...r })); return "stop"; }
+  const setPhase = useCallback((id, p) => setBusy((b) => { const n = { ...b }; if (p) n[id] = p; else delete n[id]; return n; }), []);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const loadCases = useCallback(() => getJson("/api/cases").then(setCases, () => {}), []);
+
+  // Phase 2: fetch the log entry. Repeats about once a second until the server says found, timeout, unreachable or not configured.
+  // Returns "found" | "failed" | "stopped".
+  const fetchLoop = useCallback(async (id, restart = false) => {
+    const my = epoch.current;
+    const interval = info?.retrieval?.intervalMs ?? 1000;
+    let first = restart;
+    for (let i = 0; i < 120; i += 1) {
+      if (epoch.current !== my) return "stopped";
+      const res = await fetchLog(id, first).catch(() => ({ ok: false, status: 0, body: {} }));
+      first = false;
+      if (epoch.current !== my) return "stopped";
+      if (!res.ok) { setPhase(id, { phase: "error", detail: res.body?.detail || res.body?.error || "Could not fetch the log entry." }); return "failed"; }
       setRuns((r) => ({ ...r, [id]: res.body }));
+      const rt = res.body.retrieval || {};
+      if (rt.state === "pending") { setPhase(id, { phase: "fetching", attempt: rt.attempt, elapsedMs: rt.elapsedMs, maxMs: rt.maxMs ?? info?.retrieval?.maxMs, detail: rt.detail, simulated: !!rt.simulated }); await sleep(rt.simulated ? 0 : interval); continue; }
+      if (rt.state === "found" || rt.state === "not_configured") { setPhase(id, null); return "found"; }
+      setPhase(id, { phase: rt.state, detail: rt.detail, maxMs: rt.maxMs });
+      return "failed";
+    }
+    setPhase(id, { phase: "timeout", detail: "Gave up waiting for the log entry." });
+    return "failed";
+  }, [info, setPhase]);
+
+  // Run one case: phase 1 sends (Real) or looks up the recording (Mock), phase 2 fetches the log entry. Returns "ok" | "confirm" | "stop".
+  const doRun = useCallback(async (id, extra = {}) => {
+    setRunning(id); setNotice(""); setPhase(id, { phase: "sending" });
+    try {
+      const res = await runCase(id, extra);
+      if (res.status === 412) { setPhase(id, null); setGate({ gatewayOrigin: res.body.gatewayOrigin, searchOrigin: res.body.searchOrigin, k8sOrigin: res.body.k8sOrigin, queue: [id] }); return "confirm"; }
+      if (!res.ok) { setPhase(id, { phase: "error", detail: res.body.detail || res.body.error || "failed" }); return "stop"; }
+      setRuns((r) => ({ ...r, [id]: res.body }));
+      const rt = res.body.retrieval || {};
+      if (rt.state === "pending") { setPhase(id, { phase: "fetching", attempt: 0, maxMs: info?.retrieval?.maxMs, detail: rt.detail, simulated: !!rt.simulated }); return (await fetchLoop(id)) === "found" ? "ok" : "stop"; }
+      setPhase(id, null);
       return "ok";
-    } catch { setNotice("Could not reach the lab server."); return "stop"; } finally { setRunning(null); }
-  }, []);
-  const runList = useCallback(async (ids) => {
+    } catch { setPhase(id, { phase: "error", detail: "Could not reach the lab server." }); return "stop"; } finally { setRunning(null); }
+  }, [fetchLoop, info, setPhase]);
+  const retry = useCallback(async (id) => { setRunning(id); setPhase(id, { phase: "fetching", attempt: 0, maxMs: info?.retrieval?.maxMs, detail: "Retrying." }); try { await fetchLoop(id, true); } finally { setRunning(null); } }, [fetchLoop, info, setPhase]);
+
+  const runList = useCallback(async (ids, { openTrace = false } = {}) => {
     for (let i = 0; i < ids.length; i += 1) {
       const r = await doRun(ids[i]);
-      if (r === "confirm") { setGate((g) => (g ? { ...g, queue: ids.slice(i) } : g)); return; }
+      if (r === "confirm") { setGate((g) => (g ? { ...g, queue: ids.slice(i), openTrace } : g)); return; }
+      if (r === "ok" && openTrace && ids.length === 1) go("trace", ids[0]);
     }
-  }, [doRun]);
+  }, [doRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onRun = (id) => runList([id]);
-  const onRunAll = () => runList(cases.cases.filter((c) => info?.source !== "real" || c.realRunnable).map((c) => c.id));
+  const onRun = (id) => runList([id], { openTrace: true });
+  const onLook = (id, sinceIso) => doRun(id, { since: sinceIso }).then((r) => { if (r === "ok") go("trace", id); });
+  const onRunAll = () => runList(cases.cases.filter((c) => (info?.source === "real" ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).map((c) => c.id));
   const onConfirm = async () => {
-    const queue = gate.queue;
+    const { queue, openTrace } = gate;
     const res = await confirmGateway(gate.gatewayOrigin);
     if (!res.ok) { setNotice(res.body.detail || "Could not confirm."); return; }
     setGate(null); await loadInfo();
-    runList(queue);
+    runList(queue, { openTrace });
   };
+  const onBearer = async (id, value) => { const res = await setBearer(id, value); if (!res.ok) { setNotice(res.body.detail || "Could not set the credential."); return false; } await loadCases(); setNotice(value ? "Credential set for this case (write-only; it is never shown)." : "Credential cleared."); return true; };
 
   const reset = useCallback(async () => {
     const ok = await resetWorkspace().catch(() => false);
-    setRuns({}); setGate(null); setSignal((n) => n + 1); loadInfo();
+    epoch.current += 1; setBusy({}); setRuns({}); setGate(null); setSignal((n) => n + 1); loadInfo(); loadCases();
     setNotice(ok ? "Reset: this tab's runs, pasted lines and Real confirmation are cleared." : "Reset failed on the server; the view was reloaded.");
   }, [loadInfo]);
 
@@ -106,8 +143,8 @@ export default function App() {
     if (info?.source === source) return;
     const res = await setMode(source).catch(() => ({ ok: false, body: {} }));
     if (!res.ok) { setNotice(res.body?.detail || "Could not switch mode."); return; }
-    setGate(null);
-    await Promise.all([loadInfo(), loadRuns()]);
+    epoch.current += 1; setBusy({}); setGate(null);
+    await Promise.all([loadInfo(), loadRuns(), loadCases()]);
     setSignal((n) => n + 1);
     setNotice(`Switched to ${source === "real" ? "Real" : "Mock"}: all data reloaded.`);
   };
@@ -156,8 +193,8 @@ export default function App() {
         <ConfirmGate gate={gate} onConfirm={onConfirm} onCancel={() => setGate(null)} busy={!!running} />
         {error ? <p className="field-error" role="alert">Could not load the lab ({error}). Is the server running?</p> : !story || !cases || !sinkInfo ? <p className="muted">Loading...</p> : (
           <>
-            {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} onRun={onRun} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
-            {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} onSelect={(id) => go("trace", id)} onRun={onRun} onChanged={loadRuns} running={running} />}
+            {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
+            {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id])} onRetry={retry} onChanged={loadRuns} running={running} />}
             {nav.tab === "scorecard" && <ScorecardPage info={info} runsSignal={`${signal}:${Object.keys(runs).length}:${Object.values(runs).map((r) => `${r.ranAt}${r.scored}${r.logged.length}`).join("")}`} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "sinks" && <SinksPage sinkInfo={sinkInfo} story={story} />}
             {nav.tab === "diagram" && <DiagramPage resetSignal={signal} />}

@@ -13,7 +13,7 @@ const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 
 
 export function buildPack(capture = loadCapture()) {
   const sid = (n) => `S${String(n).padStart(2, '0')}`;
-  const story = { 'say-first': 1, run: 2, trace: 3, scorecard: 4, gaps: 5, sinks: 6, real: 7, close: 8 };
+  const story = Object.fromEntries(TALK_TRACK.map((t, i) => [t.id, i + 1]));
   return {
     schema: 'demo-content-pack/1',
     id: 'privilege-logging-lab',
@@ -31,8 +31,8 @@ export function buildPack(capture = loadCapture()) {
       { id: 'trace-context', title: 'W3C Trace Context', url: 'https://www.w3.org/TR/trace-context/', kind: 'standard', use: 'The traceparent header shown on every hop.', status: 'not-read', checked: capture.capturedOn },
     ],
     cards: [
-      { id: 'try-run', label: 'Run a use case', description: 'Replay (Mock) or send (Real) any of the 17 use cases, one by one or all.', group: 'try-it', action: { type: 'route', href: '/#run' }, terms: ['audit-requirement'], story: sid(story.run) },
-      { id: 'try-trace', label: 'Read the trace', description: 'The request, the response and what each sink logged, with the user, agent, tool and decision marked inline.', group: 'try-it', action: { type: 'route', href: '/#trace' }, terms: ['log-sink'], story: sid(story.trace) },
+      { id: 'try-run', label: 'Run a use case', description: 'Replay (Mock) or send (Real) a use case; the page shows a spinner and fetches the log entry for you. 17 measured cases, plus 17 not yet measured (Real only).', group: 'try-it', action: { type: 'route', href: '/#run' }, terms: ['audit-requirement'], story: sid(story.run) },
+      { id: 'try-trace', label: 'Read the trace', description: 'The request, the response and what each sink logged as coloured JSON trees, tagged by how each entry was matched (marker or inferred time window), with the user, agent, tool and decision badged.', group: 'try-it', action: { type: 'route', href: '/#trace' }, terms: ['log-sink'], story: sid(story.trace) },
       { id: 'try-scorecard', label: 'The scorecard', description: 'Use cases by requirement clause, with a Markdown export for a customer email.', group: 'try-it', action: { type: 'route', href: '/#scorecard' }, terms: ['met-partial-missing'], story: sid(story.scorecard) },
       { id: 'concept-sinks', label: "Where it's logged", description: 'Five places a record could land, what each held, and what we cannot see.', group: 'concept', action: { type: 'route', href: '/#sinks' }, terms: ['log-sink', 'unverified'], story: sid(story.sinks) },
       { id: 'concept-diagram', label: 'Flow diagrams', description: 'One diagram per flow: caller, gateway, backend, with the log sinks hanging off the gateway.', group: 'concept', action: { type: 'route', href: '/#diagram' }, story: sid(story['say-first']) },

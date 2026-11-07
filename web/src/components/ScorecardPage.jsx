@@ -23,7 +23,7 @@ export default function ScorecardPage({ info, runsSignal, onOpen }) {
   const copy = async () => { const ok = await copyText(card.markdown, area.current); setCopied(ok ? "Copied the Markdown table. Paste it into the customer email." : "Copy was blocked: select the text below and copy it."); };
   return (
     <div data-testid="scorecard-page">
-      <p className="lede">{card.source === "mock" ? `Measured on ${card.capturedOn}: what each use case logged, scored against the four requirement clauses.` : "Real: scored from the log lines each run actually returned. Cases not run, or run without log lines, are marked."}</p>
+      <p className="lede">{card.source === "mock" ? `Measured on ${card.capturedOn}: what each use case logged, scored against the four requirement clauses. Cases marked not measured have no recording yet (Real mode only): no result is shown for them.` : "Real: scored from the log lines each run actually returned. Cases not run, or run without log lines, are marked."}</p>
       <div className="card-grid" aria-label="Totals">
         {FIELDS.map((f) => (
           <article key={f} className="card card--neutral" data-testid={`total-${f}`}>
@@ -43,7 +43,7 @@ export default function ScorecardPage({ info, runsSignal, onOpen }) {
           </tbody>
         </table>
       </div>
-      <p className="muted">met = a log line names it. partial = implied or incomplete. missing = not in the log. n/a = does not apply to the use case.</p>
+      <p className="muted">met = a log line names it. partial = implied or incomplete. missing = not in the log. n/a = does not apply to the use case. not measured = no recorded measurement yet. inferred = matched by time window, not by the run marker.</p>
       <div className="row">
         <button type="button" className="primary" onClick={copy} data-testid="copy-md">Copy as Markdown table</button>
         <span role="status" aria-live="polite" data-testid="copy-status" className="muted">{copied}</span>
@@ -61,8 +61,8 @@ function GroupRows({ group, rows, onOpen }) {
       {rows.map((r) => (
         <tr key={r.id} data-testid={`row-${r.id}`}>
           <th scope="row"><button type="button" className="linkish" onClick={() => onOpen(r.id)}>{r.title}</button></th>
-          {FIELDS.map((f) => <td key={f}>{r.score ? <LevelChip level={r.score[f]} /> : <Chip kind="neutral">{r.needsPaste ? "paste needed" : "not run"}</Chip>}</td>)}
-          <td className="notes">{Object.entries(r.notes || {}).map(([f, n]) => <span key={f}><b>{f}:</b> {visible(n)} </span>)}</td>
+          {FIELDS.map((f) => <td key={f}>{r.score ? <><LevelChip level={r.score[f]} />{r.inferred?.[f] && <> <Chip kind="warn">inferred</Chip></>}</> : <Chip kind="neutral">{r.notMeasured ? "not measured" : r.needsPaste ? "paste needed" : "not run"}</Chip>}</td>)}
+          <td className="notes">{r.notMeasured && <span className="muted">Needs: {(r.needs || []).join("; ")}. </span>}{Object.entries(r.notes || {}).map(([f, n]) => <span key={f}><b>{f}:</b> {visible(n)} </span>)}</td>
         </tr>
       ))}
     </>

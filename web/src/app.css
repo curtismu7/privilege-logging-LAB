@@ -99,3 +99,40 @@ button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:h
 .app--presenter .card p, .app--presenter .kv, .app--presenter .tbl { font-size: 1rem; }
 .app--presenter .page h1 { font-size: 1.9rem; }
 .app--presenter .presenter-say { font-size: 1.2rem; }
+
+/* Progress and failure states of a run */
+.busy { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; padding: 0.45rem 0.7rem; border: 1px solid var(--status-info); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 0.85rem; }
+.busy--fail { border-color: var(--danger-text); }
+.spinner { flex: none; width: 1rem; height: 1rem; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; }
+@media (prefers-reduced-motion: no-preference) { .spinner { animation: pll-spin 0.9s linear infinite; } }
+@keyframes pll-spin { to { transform: rotate(360deg); } }
+.bearer { margin: 0.5rem 0; } .bearer input { flex: 1 1 14rem; min-width: 0; }
+
+/* Log entries and the JSON tree viewer */
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.5rem 0; font-size: 0.8rem; }
+.fbadge { display: inline-block; padding: 0 0.45rem; border-radius: 4px; border: 1px solid var(--border); background: var(--json-bg); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.fbadge--user { color: var(--status-info); border-color: var(--status-info); }
+.fbadge--agent { color: var(--status-ok); border-color: var(--status-ok); }
+.fbadge--tool { color: var(--status-warn); border-color: var(--status-warn); }
+.fbadge--decision { color: var(--danger-text); border-color: var(--danger-text); }
+.entries { list-style: none; margin: 0.5rem 0; padding: 0; display: grid; gap: 0.6rem; }
+.entry { border: 1px solid var(--border); border-radius: 8px; background: var(--json-bg); padding: 0.4rem 0.6rem; min-width: 0; }
+.entry__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; font-size: 0.75rem; }
+.jt { min-width: 0; }
+.jt__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0.35rem 0; }
+.jt__bar button { min-height: 28px; padding: 2px 10px; font-size: 0.75rem; }
+.jt__tree { font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.55; overflow-x: auto; padding: 0.25rem 0; }
+.jt__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.15rem; padding: 1px 0 1px calc((var(--lvl, 1) - 1) * 1rem); min-width: 0; color: var(--text); border-radius: 4px; }
+.jt__row:focus-visible { outline: 3px solid var(--focus); outline-offset: 0; }
+.jt__twisty { flex: none; width: 1.2rem; height: 1.2rem; min-height: 0; padding: 0; margin-right: 0.3rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.7rem; line-height: 1; cursor: pointer; }
+.jt__twisty--leaf { display: inline-block; border-color: transparent; background: transparent; cursor: default; }
+.jt__key { color: var(--json-key); font-weight: 700; }
+.jt__punct { color: var(--muted); }
+.jt__str { color: var(--json-string); overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; }
+.jt__num { color: var(--json-number); }
+.jt__bool { color: var(--json-bool); font-weight: 700; }
+.jt__null { color: var(--json-null); }
+.jt__more { min-height: 0; padding: 0 0.5rem; margin-left: 0.4rem; font-size: 0.7rem; }
+.jt__str mark { color: inherit; }
+.jt__raw { max-height: 24rem; overflow: auto; }
+.jt__row .fbadge { margin-left: 0.5rem; }

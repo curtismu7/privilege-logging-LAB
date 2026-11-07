@@ -7,6 +7,10 @@ export const SCHEMA = 'privilege-logging-capture/1';
 export const FIELDS = ['user', 'agent', 'tool', 'decision'];
 export const LEVELS = ['met', 'partial', 'missing', 'na'];
 export const GROUPS = ['MCP', 'AI Guard', 'Rejected', 'Aggregate', 'A2A', 'LLM', 'Intent'];
+// Groups of cases that have NOT been measured yet (realOnly). They have no recorded lines and no score until a Real run produces lines.
+export const REAL_ONLY_GROUPS = ['Keys', 'Federated identity', 'Approvals', 'Registry lifecycle'];
+export const AUTHS = ['agent-key', 'bearer'];
+export const REAL_ONLY_FILE = new URL('../data/real-only-cases.json', import.meta.url);
 export const CAPTURE_FILE = new URL('../data/capture.json', import.meta.url);
 
 const ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -44,10 +48,23 @@ export function validateCapture(d) {
     if (typeof c.id !== 'string' || !ID.test(c.id)) p.push(`${at}: bad id`);
     else if (caseIds.has(c.id)) p.push(`${at}: duplicate id ${c.id}`);
     else caseIds.add(c.id);
-    if (!GROUPS.includes(c.group)) p.push(`${at}: group must be one of ${GROUPS.join(', ')}`);
+    const realOnly = c.realOnly === true;
+    if (c.realOnly !== undefined && typeof c.realOnly !== 'boolean') p.push(`${at}: realOnly must be true or false`);
+    if (!(realOnly ? REAL_ONLY_GROUPS : GROUPS).includes(c.group)) p.push(`${at}: group must be one of ${(realOnly ? REAL_ONLY_GROUPS : GROUPS).join(', ')}`);
+    if (c.needs !== undefined && (!Array.isArray(c.needs) || c.needs.length > 6 || !c.needs.every((n) => txt(n, 48) && n))) p.push(`${at}: needs must be up to 6 short strings`);
+    if (isObj(c.request) && c.request.auth !== undefined && !AUTHS.includes(c.request.auth)) p.push(`${at}: request.auth must be one of ${AUTHS.join(', ')}`);
+    for (const k of ['consoleAction', 'heldCall']) if (c[k] !== undefined && typeof c[k] !== 'boolean') p.push(`${at}: ${k} must be true or false`);
     if (!txt(c.title, 160) || !c.title) p.push(`${at}: title required`);
     if (!txt(c.identity, 120) || !c.identity) p.push(`${at}: identity required`);
     if (!isObj(c.request) || typeof c.request.method !== 'string') p.push(`${at}: request.method required`);
+    if (realOnly) {
+      // An unmeasured case carries NO recorded evidence: no outcome, no lines, no score. Anything else would be a fabricated result.
+      if (c.outcome !== undefined) p.push(`${at}: a realOnly case must not carry a recorded outcome`);
+      if (c.score !== undefined || c.scoreNotes !== undefined) p.push(`${at}: a realOnly case must not carry a score`);
+      if (c.logged !== undefined && !(Array.isArray(c.logged) && c.logged.length === 0)) p.push(`${at}: a realOnly case must not carry recorded log lines`);
+      if (!Array.isArray(c.needs) || !c.needs.length) p.push(`${at}: a realOnly case must say what it needs`);
+      continue;
+    }
     if (!isObj(c.outcome) || !Number.isInteger(c.outcome.http) || c.outcome.http < 100 || c.outcome.http > 599 || !txt(c.outcome.note, 300)) p.push(`${at}: outcome needs http 100-599 and a note`);
     if (!Array.isArray(c.logged) || c.logged.length > 12) p.push(`${at}: logged must be an array`);
     else for (const [j, l] of c.logged.entries()) {
@@ -71,9 +88,21 @@ export function validateCapture(d) {
   return p;
 }
 
-export function loadCapture(file = CAPTURE_FILE) {
+// cases = the MEASURED cases (recorded outcome, lines and score). realOnly = cases that have not been measured: they are listed, never
+// replayed in Mock, and have no score until a Real run produces log lines. They live in server/data/real-only-cases.json.
+export function loadCapture(file = CAPTURE_FILE, pendingFile = REAL_ONLY_FILE) {
   const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
   const problems = validateCapture(doc);
   if (problems.length) throw new Error(`capture is not ${SCHEMA}: ${problems.slice(0, 5).join('; ')}`);
-  return doc;
+  let pending = [];
+  if (pendingFile) {
+    const pdoc = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+    const pp = validateCapture({ ...doc, cases: pdoc.cases });
+    if (pp.length) throw new Error(`real-only cases are not valid: ${pp.slice(0, 5).join('; ')}`);
+    if (!pdoc.cases.every((c) => c.realOnly === true)) throw new Error('every case in real-only-cases.json must set realOnly: true');
+    pending = pdoc.cases;
+  }
+  const ids = new Set(doc.cases.map((c) => c.id));
+  if (pending.some((c) => ids.has(c.id))) throw new Error('a real-only case reuses a measured case id');
+  return { ...doc, cases: doc.cases.filter((c) => !c.realOnly), realOnly: [...doc.cases.filter((c) => c.realOnly), ...pending] };
 }

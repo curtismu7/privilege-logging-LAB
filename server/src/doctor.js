@@ -6,6 +6,7 @@ import { loadCapture, FIELDS } from './capture.js';
 import { scoreLines } from './scorer.js';
 import { buildStory, STATUSES, bannerMock } from './story.js';
 import { modeFrom, realConfig } from './config.js';
+import { sourcesFrom } from './logSources.js';
 import { DIAGRAM_NAMES, buildDiagram } from './diagramData.js';
 import { naFields } from './lab.js';
 
@@ -18,7 +19,13 @@ export async function runChecks({ env = process.env } = {}) {
 
   const cfg = realConfig(env);
   try { add('mode', 'pass', `mode=${modeFrom(env)}${cfg.ok ? ' (Real configured)' : ' (Mock only)'}`); } catch (e) { add('mode', 'fail', e.message); }
-  add('real-settings', 'info', cfg.ok ? `Real is configured: gateway origin ${cfg.gateway.origin}, key set (not shown), ${cfg.search ? `search origin ${cfg.search.origin}` : 'no search URL (paste box)'}` : `Real is not configured (${cfg.problem.replace(/^Real is not configured: /, '').split('. ')[0]}). Mock keeps working.`);
+  add('real-settings', 'info', cfg.ok ? `Real is configured: gateway origin ${cfg.gateway.origin}, key set (not shown)` : `Real is not configured (${cfg.problem.replace(/^Real is not configured: /, '').split('. ')[0]}). Mock keeps working.`);
+  if (cfg.ok) {
+    const srcs = sourcesFrom(cfg);
+    add('log-sources', 'info', srcs.length
+      ? `log sources: ${[cfg.k8s && `Kubernetes pod log via ${cfg.k8s.origin} (namespace ${cfg.k8s.namespace}, ${cfg.k8s.pod ? `pod ${cfg.k8s.pod}` : `selector ${cfg.k8s.selector}`}, container ${cfg.k8s.container}; start it with: kubectl proxy)`, cfg.search && `search endpoint ${cfg.search.origin}${cfg.index ? ` (index ${cfg.index})` : ''}`].filter(Boolean).join('; ')}`
+      : 'no log source configured (set PRIV_LOG_K8S_PROXY_URL + PRIV_LOG_K8S_NAMESPACE + PRIV_LOG_K8S_POD, or PRIV_LOG_SEARCH_URL): Real runs will ask you to paste the log lines');
+  } else add('log-sources', 'info', 'log sources are read in Real mode only: PRIV_LOG_K8S_PROXY_URL (default http://127.0.0.1:8001), PRIV_LOG_K8S_NAMESPACE, PRIV_LOG_K8S_POD, PRIV_LOG_K8S_CONTAINER (default log-tailer), PRIV_LOG_SEARCH_URL, PRIV_LOG_SEARCH_INDEX');
 
   try { add('bind', 'pass', `${assertBindAllowed(bindHost(env), env)}${env.PRIV_LOG_BIND ? ' (PRIV_LOG_BIND opt-in)' : ' (loopback)'}`); } catch (e) { add('bind', 'fail', e.message); }
 
@@ -27,7 +34,7 @@ export async function runChecks({ env = process.env } = {}) {
   add('port-range', problem ? 'fail' : 'pass', problem || `${port} is the allocated port ${PORT_MIN} and not reserved`);
 
   let capture = null;
-  try { capture = loadCapture(); add('capture', 'pass', `${capture.cases.length} cases, ${capture.sinks.length} sinks, schema valid (measured ${capture.capturedOn})`); } catch (e) { add('capture', 'fail', e.message); }
+  try { capture = loadCapture(); add('capture', 'pass', `${capture.cases.length} measured cases and ${capture.realOnly.length} not-yet-measured (Real only), ${capture.sinks.length} sinks, schema valid (measured ${capture.capturedOn})`); } catch (e) { add('capture', 'fail', e.message); }
   if (capture) {
     // The scorer must reproduce the recorded score for every field with no fixed exception (see test/scorer.test.js for the five documented ones).
     const sampleOk = capture.cases.every((c) => FIELDS.every((f) => scoreLines(c.logged.flatMap((l) => l.lines), { na: naFields(c) }).score[f] !== undefined));

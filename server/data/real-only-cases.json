@@ -1,0 +1,42 @@
+{
+  "schema": "privilege-logging-capture/1",
+  "cases": [
+    { "id": "keys-revoked", "group": "Keys", "title": "Revoked agent key", "identity": "agent access key (revoked)", "realOnly": true, "needs": ["revoked agent key"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+    { "id": "keys-expired", "group": "Keys", "title": "Expired agent key", "identity": "agent access key (expired)", "realOnly": true, "needs": ["expired agent key"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+    { "id": "keys-rate-limited", "group": "Keys", "title": "Rate-limited key (429)", "identity": "agent access key at its rate cap", "realOnly": true, "needs": ["key at its rate cap"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+    { "id": "keys-no-mcp-scope", "group": "Keys", "title": "Key without the mcp scope", "identity": "agent access key without mcp scope", "realOnly": true, "needs": ["key without mcp scope"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+
+    { "id": "fed-valid-token", "group": "Federated identity", "title": "Valid workload token", "identity": "federated workload token", "realOnly": true, "needs": ["federated token"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+    { "id": "fed-wrong-audience", "group": "Federated identity", "title": "Workload token, wrong audience", "identity": "federated workload token (wrong audience)", "realOnly": true, "needs": ["federated token", "wrong audience"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+    { "id": "fed-wrong-issuer", "group": "Federated identity", "title": "Workload token, wrong issuer", "identity": "federated workload token (wrong issuer)", "realOnly": true, "needs": ["federated token", "wrong issuer"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+    { "id": "fed-expired-token", "group": "Federated identity", "title": "Expired workload token", "identity": "federated workload token (expired)", "realOnly": true, "needs": ["federated token", "expired token"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+    { "id": "fed-lifetime-too-long", "group": "Federated identity", "title": "Workload token, lifetime too long", "identity": "federated workload token (lifetime too long)", "realOnly": true, "needs": ["federated token", "long-lived token"],
+      "request": { "method": "tools/call", "tool": "get_weather", "arguments": { "city": "Dallas" }, "auth": "bearer" } },
+
+    { "id": "approval-held", "group": "Approvals", "title": "Call held for human approval", "identity": "agent access key", "realOnly": true, "heldCall": true, "needs": ["console approver"],
+      "request": { "method": "tools/call", "tool": "create_transfer", "arguments": { "memo": "lab" } } },
+    { "id": "approval-approved", "group": "Approvals", "title": "Held call, approved", "identity": "agent access key", "realOnly": true, "heldCall": true, "needs": ["console approver", "console action"],
+      "request": { "method": "tools/call", "tool": "create_transfer", "arguments": { "memo": "lab" } } },
+    { "id": "approval-denied", "group": "Approvals", "title": "Held call, denied", "identity": "agent access key", "realOnly": true, "heldCall": true, "needs": ["console approver", "console action"],
+      "request": { "method": "tools/call", "tool": "create_transfer", "arguments": { "memo": "lab" } } },
+    { "id": "approval-cedar-decision", "group": "Approvals", "title": "Cedar per-call decision", "identity": "agent access key", "realOnly": true, "needs": ["Cedar policy on the tool"],
+      "request": { "method": "tools/call", "tool": "create_transfer", "arguments": { "memo": "lab" } } },
+
+    { "id": "reg-key-created", "group": "Registry lifecycle", "title": "Agent key created", "identity": "console action", "realOnly": true, "consoleAction": true, "needs": ["console action"],
+      "request": { "method": "console action", "note": "Create an agent key in the console, then look for entries since a moment before." } },
+    { "id": "reg-key-rotated", "group": "Registry lifecycle", "title": "Agent key rotated or replaced", "identity": "console action", "realOnly": true, "consoleAction": true, "needs": ["console action"],
+      "request": { "method": "console action", "note": "Rotate or replace an agent key in the console, then look for entries since a moment before." } },
+    { "id": "reg-key-revoked", "group": "Registry lifecycle", "title": "Agent key revoked", "identity": "console action", "realOnly": true, "consoleAction": true, "needs": ["console action"],
+      "request": { "method": "console action", "note": "Revoke an agent key in the console, then look for entries since a moment before." } },
+    { "id": "reg-key-expired", "group": "Registry lifecycle", "title": "Agent key expired", "identity": "console action", "realOnly": true, "consoleAction": true, "needs": ["console action", "a key that reaches its expiry"],
+      "request": { "method": "console action", "note": "Let an agent key reach its expiry, then look for entries since a moment before." } }
+  ]
+}

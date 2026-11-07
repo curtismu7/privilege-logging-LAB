@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildPack } from './build-content-pack.mjs';
+import { TALK_TRACK } from '../server/src/story.js';
 import { validatePack } from './validate-content-pack.mjs';
 
 const root = new URL('..', import.meta.url);
@@ -17,7 +18,7 @@ test('the committed content-pack.json is exactly what the builder makes (no drif
 
 test('every story is used by a card, and every card with a story points at one', () => {
   const pack = buildPack();
-  assert.equal(pack.stories.length, 8);
+  assert.equal(pack.stories.length, TALK_TRACK.length);
   assert.ok(pack.cards.filter((c) => c.story).length >= 5);
   for (const c of pack.cards.filter((x) => x.story)) assert.ok(pack.stories.some((s) => s.id === c.story), c.id);
 });

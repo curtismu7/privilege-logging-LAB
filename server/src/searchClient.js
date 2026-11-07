@@ -19,5 +19,10 @@ export async function searchWindow({ client, searchUrl, index, fromMs, toMs, tra
   if (res.redirect) throw Object.assign(new RealError('redirect_refused', 'the search endpoint answered a redirect; redirects are never followed', 502), { hop });
   if (res.status < 200 || res.status >= 300) throw Object.assign(new RealError('search_failed', `search answered HTTP ${res.status}`, 502), { hop });
   if (!Array.isArray(hits)) throw Object.assign(new RealError('search_bad_shape', 'search answer has no hits.hits array', 502), { hop });
-  return { hop, lines: hits.slice(0, MAX_LINES).map(hitLine), total: hits.length };
+  const lines = hits.slice(0, MAX_LINES).map((h) => {
+    const t = h?._source?.['@timestamp'] ?? h?._source?.timestamp;
+    const ts = typeof t === 'string' || typeof t === 'number' ? Date.parse(t) : NaN;
+    return { text: hitLine(h), ts: Number.isFinite(ts) ? ts : null };
+  });
+  return { hop, lines, total: hits.length };
 }
