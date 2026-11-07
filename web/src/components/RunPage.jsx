@@ -22,6 +22,7 @@ export default function RunPage({ cases, runs, info, running, onRun, onRunAll, o
                   <h3 className="card__title">{c.title}</h3>
                   <p className="muted">{c.identity}</p>
                   <p><code>{summary(c.request)}</code></p>
+                  {real && c.realRunnable && /signed-in/i.test(c.identity) && <p className="muted" data-testid={`ident-${c.id}`}>Real sends this with the agent key (this tool has no user sign-in), so the identity differs from the measured case.</p>}
                   {real && !c.realRunnable && <p className="muted" data-testid={`note-${c.id}`}>Not runnable in Real: {c.realNote}</p>}
                   <div className="row">
                     <button type="button" className="primary" onClick={() => onRun(c.id)} disabled={!!running || !runnable(c)} data-testid={`run-${c.id}`} title={runnable(c) ? "" : c.realNote}>

@@ -70,3 +70,10 @@ test('safety: private/reserved address detection, port, bind, and host scan', ()
   assert.equal(assertBindAllowed('0.0.0.0', { PRIV_LOG_BIND: '0.0.0.0' }), '0.0.0.0');
   assert.deepEqual(scanHosts('see https://gateway.example/x and http://127.0.0.1:1/ and https://real.corp.net/'), ['real.corp.net']);
 });
+
+test('a hostile settings file: an over-long line is skipped, unrelated names are ignored, a quoted value keeps its text', () => {
+  const t0 = Date.now();
+  const s = parseSettings(`${' '.repeat(500_000)}x\nPRIV_LOG_AGENT_KEY=${'a'.repeat(5000)}\nPRIV_LOG_SEARCH_INDEX="my index"\nHOME=/etc\n`);
+  assert.ok(Date.now() - t0 < 1000);
+  assert.deepEqual(s, { PRIV_LOG_SEARCH_INDEX: 'my index' });
+});

@@ -157,6 +157,7 @@ describe("Real mode (against a fake gateway)", () => {
       expect(screen.getByTestId("banner")).toHaveAttribute("data-state", "live");
       expect(screen.getByTestId("banner").textContent).toMatch(/REAL \(owner-run\)/);
       expect(screen.getByTestId("note-llm-allowed").textContent).toMatch(/Not runnable in Real/);
+      expect(screen.getByTestId("ident-mcp-allowed-user").textContent).toMatch(/agent key/);
       expect(screen.getByTestId("run-llm-allowed")).toBeDisabled();
       // first send: the gate appears and nothing is sent yet
       await user.click(screen.getByTestId("run-mcp-allowed-key"));

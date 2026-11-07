@@ -18,6 +18,7 @@ export function settingsFile(env = process.env) {
 export function parseSettings(text) {
   const out = {};
   for (const raw of String(text).split('\n')) {
+    if (raw.length > 4096) continue; // a settings line is short; skip anything else
     const m = /^\s*(?:export\s+)?([A-Z0-9_]{1,40})\s*=\s*(.*)$/.exec(raw);
     if (!m || !SETTING_NAMES.includes(m[1])) continue;
     let v = m[2].trim();
