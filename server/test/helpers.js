@@ -129,6 +129,8 @@ export async function fakeK8s({ logText = () => '', pods = [], status = 200, lis
     const u = new URL(req.url, 'http://x');
     if (/\/pods$/.test(u.pathname)) { res.writeHead(listStatus, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ kind: 'PodList', items: pods })); }
     if (!/\/pods\/[^/]+\/log$/.test(u.pathname)) { res.writeHead(404); return res.end('not found'); }
+    // The real kube API through kubectl proxy answers 406 to `Accept: text/plain` on the log endpoint (measured 2026-11-07); */* and no header are fine.
+    if ((req.headers.accept || '').trim() === 'text/plain') { res.writeHead(406, { 'content-type': 'application/json' }); return res.end('{"kind":"Status","code":406}'); }
     if (bigBody) { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end(`${'x'.repeat(2_000_000)}\n`); }
     res.writeHead(status, { 'content-type': 'text/plain' });
     res.end(status === 200 ? `${logText(req.url)}\n` : 'error');
