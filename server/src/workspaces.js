@@ -11,7 +11,7 @@ export function workspaceFrom(req) {
 }
 
 export function createWorkspaces({ max = 500, ttlMs = 60 * 60 * 1000, now = Date.now } = {}) {
-  const map = new Map(); // id -> { runs: Map(caseId -> result), confirmed: string|null, at }
+  const map = new Map(); // id -> { runs: Map('source:caseId' -> result), confirmed: string|null, at }
   const sweep = () => {
     const t = now();
     const expired = [...map.entries()].filter(([, v]) => t - v.at > ttlMs).sort((a, b) => a[1].at - b[1].at);
@@ -27,7 +27,10 @@ export function createWorkspaces({ max = 500, ttlMs = 60 * 60 * 1000, now = Date
       v.at = now();
       return v;
     },
-    putRun(id, result) { const v = this.state(id); v.runs.set(result.caseId, result); while (v.runs.size > MAX_CASES) v.runs.delete(v.runs.keys().next().value); },
+    // Runs are kept per source: a Mock replay and a Real run of the same case never overwrite or show up in each other's views.
+    putRun(id, result) { const v = this.state(id); v.runs.set(`${result.source}:${result.caseId}`, result); while (v.runs.size > 2 * MAX_CASES) v.runs.delete(v.runs.keys().next().value); },
+    getRun(id, source, caseId) { return this.state(id).runs.get(`${source}:${caseId}`); },
+    listRuns(id, source) { return [...this.state(id).runs.values()].filter((r) => r.source === source); },
     resetWorkspace(id) { map.delete(id); },
     size() { return map.size; },
   };

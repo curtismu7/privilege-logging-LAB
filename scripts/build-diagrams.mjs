@@ -20,17 +20,18 @@ export const FLOWS = [
   { name: 'intent', group: 'Intent', backend: 'Intent encoder', title: 'Intent encoder not reachable', forwards: 'The gateway probes the intent encoder on each request.' },
 ];
 
-const SINK_POS = { 'gateway-log': [320, 420], response: [0, 420], console: [640, 420], elasticsearch: [160, 580], opensearch: [480, 580] };
+// Caller, gateway and backend on one row; the five sinks on a row below the gateway, so the arrows fan out without crossing the boxes.
+const SINK_POS = { 'gateway-log': [0, 330], response: [230, 330], console: [460, 330], elasticsearch: [690, 330], opensearch: [920, 330] };
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export function buildDiagram(flow, capture) {
   const cases = capture.cases.filter((c) => c.group === flow.group);
   const sinks = capture.sinks;
   const nodes = [
-    { id: 'caller', label: 'Caller: agent key or signed-in user', group: 'caller', x: 0, y: 200 },
-    { id: 'gateway', label: 'Privilege gateway', group: 'gateway', x: 320, y: 200 },
-    ...(flow.backend ? [{ id: 'backend', label: flow.backend, group: 'backend', x: 640, y: 200 }] : []),
-    ...sinks.map((s) => ({ id: s.id, label: s.name, group: s.unverified ? 'unverified' : 'sink', x: SINK_POS[s.id]?.[0] ?? 0, y: SINK_POS[s.id]?.[1] ?? 700 })),
+    { id: 'caller', label: 'Caller: agent key or signed-in user', group: 'caller', x: 130, y: 120 },
+    { id: 'gateway', label: 'Privilege gateway', group: 'gateway', x: 460, y: 120 },
+    ...(flow.backend ? [{ id: 'backend', label: flow.backend, group: 'backend', x: 790, y: 120 }] : []),
+    ...sinks.map((s) => ({ id: s.id, label: s.name, group: s.unverified ? 'unverified' : 'sink', x: SINK_POS[s.id]?.[0] ?? 0, y: SINK_POS[s.id]?.[1] ?? 480 })),
   ];
   const edges = []; const steps = [];
   const step = (source, target, label, title, what, dashed) => { edges.push({ source, target, label, ...(dashed ? { dashed: true } : {}) }); steps.push({ title, what: clip(what, 590), edges: [edges.length - 1] }); };

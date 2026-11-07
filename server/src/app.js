@@ -85,10 +85,18 @@ export function createApp({
 
   api.get('/story', (_req, res) => { noStore(res); res.json(buildStory(capture)); });
   api.get('/cases', (_req, res) => { noStore(res); res.json({ groups: [...new Set(capture.cases.map((c) => c.group))], cases: capture.cases.map(caseSummary) }); });
-  api.get('/sinks', (_req, res) => { noStore(res); res.json({ requirement: capture.requirement, sinks: capture.sinks, extraSinks: EXTRA_SINKS, capturedOn: capture.capturedOn }); });
+  api.get('/sinks', (_req, res) => {
+    noStore(res);
+    // Per sink, from the capture: how many cases it was read for, how many held lines, and how many lines in all.
+    const usage = Object.fromEntries(capture.sinks.map((s) => {
+      const entries = capture.cases.map((c) => c.logged.find((l) => l.source === s.id)).filter(Boolean);
+      return [s.id, { casesRead: entries.length, casesWithLines: entries.filter((e) => e.lines.length).length, lines: entries.reduce((n, e) => n + e.lines.length, 0), totalCases: capture.cases.length }];
+    }));
+    res.json({ requirement: capture.requirement, sinks: capture.sinks, extraSinks: EXTRA_SINKS, usage, capturedOn: capture.capturedOn });
+  });
   api.get('/diagram', (req, res) => { noStore(res); res.json({ names: DIAGRAM_NAMES, ...buildDiagram(DIAGRAM_NAMES.includes(req.query.name) ? req.query.name : undefined) }); });
 
-  api.get('/runs', withWorkspace((ws, _req, res) => res.json({ source: mode, runs: [...workspaces.state(ws).runs.values()] })));
+  api.get('/runs', withWorkspace((ws, _req, res) => res.json({ source: mode, runs: workspaces.listRuns(ws, mode) })));
 
   // Real: the first send to a configured gateway needs an explicit confirmation of the origins (per workspace).
   api.post('/confirm', withWorkspace((ws, req, res) => {
@@ -140,15 +148,14 @@ export function createApp({
     const out = scorePasted(parsed.lines, c);
     let attached = false;
     if (mode === 'real' && c) {
-      const st = workspaces.state(ws);
-      const run = st.runs.get(c.id);
-      if (run && run.source === 'real') { workspaces.putRun(ws, attachPasted(run, c, parsed.lines)); attached = true; }
+      const run = workspaces.getRun(ws, 'real', c.id);
+      if (run) { workspaces.putRun(ws, attachPasted(run, c, parsed.lines)); attached = true; }
     }
     return res.json({ ...out, attached, caseId: c ? c.id : null });
   }));
 
   api.get('/scorecard', withWorkspace((ws, _req, res) => {
-    const rows = scorecardRows(capture, workspaces.state(ws).runs, mode);
+    const rows = scorecardRows(capture, (id) => workspaces.getRun(ws, 'real', id), mode);
     const markdown = toMarkdown(rows, { source: mode, capturedOn: capture.capturedOn, requirement: capture.requirement });
     res.json({ source: mode, capturedOn: capture.capturedOn, requirement: capture.requirement, rows, markdown });
   }));

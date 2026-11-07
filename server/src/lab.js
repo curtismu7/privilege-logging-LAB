@@ -115,10 +115,10 @@ const cell = (s) => String(s ?? '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
 const chipWord = (l) => (l === 'na' ? 'n/a' : l ?? 'not run');
 
 // The scorecard rows for the current mode. rows[] = { id, group, title, score|null, notes, ran }.
-export function scorecardRows(capture, runs, source) {
+export function scorecardRows(capture, getRun, source) {
   return capture.cases.map((c) => {
     if (source === 'mock') return { id: c.id, group: c.group, title: c.title, identity: c.identity, score: c.score, notes: c.scoreNotes, ran: true };
-    const r = runs.get(c.id);
+    const r = getRun(c.id);
     return { id: c.id, group: c.group, title: c.title, identity: c.identity, score: r?.scored ? r.score : null, notes: r?.scored ? r.scoreNotes : {}, ran: !!r, needsPaste: !!r && !r.scored };
   });
 }

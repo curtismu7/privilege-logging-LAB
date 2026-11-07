@@ -348,3 +348,24 @@ test('story, sinks, cases, diagram endpoints serve the labelled data', async () 
     assert.equal((await get(url, '/api/nope')).status, 404);
   });
 });
+
+test('runs are kept per source: a Real run never shows up in Mock views (and the Mock scorecard stays the recorded one)', async () => {
+  const gw = await fakeGateway(); const search = await fakeSearch({ events: EVENTS() });
+  try {
+    await withServer(async (url) => {
+      await confirm(url, gw);
+      await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 });
+      assert.equal((await json(await get(url, '/api/runs'))).body.runs.length, 1);
+      await post(url, '/api/mode', { source: 'mock' });
+      assert.equal((await json(await get(url, '/api/runs'))).body.runs.length, 0);
+      await post(url, '/api/run', { caseId: 'mcp-allowed-key' });
+      const mockRuns = (await json(await get(url, '/api/runs'))).body.runs;
+      assert.deepEqual(mockRuns.map((r) => r.source), ['mock']);
+      await post(url, '/api/mode', { source: 'real' });
+      const realRuns = (await json(await get(url, '/api/runs'))).body.runs;
+      assert.deepEqual(realRuns.map((r) => r.source), ['real']);
+      const rows = (await json(await get(url, '/api/scorecard'))).body.rows;
+      assert.equal(rows.filter((r) => r.ran).length, 1);
+    }, realOpts(gw, search));
+  } finally { await gw.close(); await search.close(); }
+});

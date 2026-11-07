@@ -47,7 +47,7 @@ export async function fakeGateway({ key = KEY, audit = null, redirectTo = null, 
 }
 
 // A FAKE Elasticsearch/OpenSearch-style _search endpoint on loopback. events: [{ '@timestamp', message|... }] (the time range is applied).
-export async function fakeSearch({ events = [], status = 200, raw = null } = {}) {
+export async function fakeSearch({ events = [], status = 200, raw = null, ignoreRange = false } = {}) {
   const requests = [];
   const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
@@ -55,7 +55,7 @@ export async function fakeSearch({ events = [], status = 200, raw = null } = {})
     if (raw !== null) { res.writeHead(status, { 'content-type': 'application/json' }); return res.end(raw); }
     let q; try { q = JSON.parse(body); } catch { q = {}; }
     const range = q?.query?.range?.['@timestamp'] || {};
-    const hits = events.filter((e) => (!range.gte || e['@timestamp'] >= range.gte) && (!range.lte || e['@timestamp'] <= range.lte)).map((e) => ({ _index: 'x', _source: e }));
+    const hits = events.filter((e) => ignoreRange || (!range.gte || e['@timestamp'] >= range.gte) && (!range.lte || e['@timestamp'] <= range.lte)).map((e) => ({ _index: 'x', _source: e }));
     res.writeHead(status, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ hits: { hits } }));
   });

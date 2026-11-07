@@ -1,4 +1,4 @@
-.pat-canvas { height: 600px; border: 1px solid var(--th-border); border-radius: var(--radius-lg); background: var(--th-bg-card); }
+.pat-canvas { height: 480px; border: 1px solid var(--th-border); border-radius: var(--radius-lg); background: var(--th-bg-card); }
 .pat-node { padding: 14px 16px; min-width: 110px; max-width: 190px; text-align: center; font-size: var(--font-size-sm); font-weight: 600; color: var(--th-text); background: var(--th-status-info-bg); border: 2px solid var(--th-status-info); border-radius: var(--radius-md); }
 .pat-node--gateway { border-width: 3px; border-color: var(--th-accent); }
 .pat-node--resource { border-color: var(--th-border-strong); background: var(--th-bg-inset); }
@@ -11,7 +11,7 @@
 .pat-edge--dim { opacity: 0.3; }
 .pat-reset { margin: 4px 0 8px; }
 .pat-json { margin: 8px 0 0; padding: 10px; background: var(--th-bg-inset); border-radius: var(--radius-md); font-family: var(--font-mono); font-size: var(--font-size-sm); overflow-x: auto; }
-@media (max-width: 480px) { .pat-canvas { height: 540px; } }
+@media (max-width: 480px) { .pat-canvas { height: 420px; } }
 /* React Flow ships light-only label and control colours; follow the theme tokens in dark mode too. */
 .pat-canvas .react-flow__controls { box-shadow: none; border: 1px solid var(--th-border-strong); border-radius: var(--radius-md); overflow: hidden; }
 .pat-canvas .react-flow__controls-button { background: var(--th-bg-card); color: var(--th-text); border-bottom: 1px solid var(--th-border); }
@@ -21,3 +21,9 @@
 .pat-elabel { position: absolute; pointer-events: none; padding: 1px 6px; border-radius: var(--radius-sm); border: 1px solid var(--th-border); background: var(--th-bg-card); color: var(--th-text); font-size: 13px; white-space: nowrap; }
 .pat-elabel--now { border-color: var(--th-status-info); font-weight: 700; }
 .pat-elabel--dim { opacity: 0.55; }
+
+.pat-node--caller { border-color: var(--th-border-strong); background: var(--th-bg-inset); }
+.pat-node--backend { border-color: var(--th-status-info); }
+.pat-node--sink { border-color: var(--th-ok); background: var(--th-bg-card); }
+.pat-node--unverified { border-color: var(--th-status-warning); border-style: dashed; background: var(--th-bg-inset); }
+.pat-edge--none path { stroke-dasharray: 6 5; }

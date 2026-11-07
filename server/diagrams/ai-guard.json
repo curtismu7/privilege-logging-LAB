@@ -30,57 +30,57 @@
       "id": "caller",
       "label": "Caller: agent key or signed-in user",
       "group": "caller",
-      "x": 0,
-      "y": 200
+      "x": 130,
+      "y": 120
     },
     {
       "id": "gateway",
       "label": "Privilege gateway",
       "group": "gateway",
-      "x": 320,
-      "y": 200
+      "x": 460,
+      "y": 120
     },
     {
       "id": "backend",
       "label": "MCP server (one app)",
       "group": "backend",
-      "x": 640,
-      "y": 200
+      "x": 790,
+      "y": 120
     },
     {
       "id": "gateway-log",
       "label": "Gateway pod log (cyonproxy.log)",
       "group": "sink",
-      "x": 320,
-      "y": 420
+      "x": 0,
+      "y": 330
     },
     {
       "id": "response",
       "label": "PingGateway X-Gw-Audit-Trail header",
       "group": "unverified",
-      "x": 0,
-      "y": 420
+      "x": 230,
+      "y": 330
     },
     {
       "id": "console",
       "label": "Console Activity Log and Agent Insights",
       "group": "sink",
-      "x": 640,
-      "y": 420
+      "x": 460,
+      "y": 330
     },
     {
       "id": "elasticsearch",
       "label": "Elasticsearch ping-siem-events",
       "group": "sink",
-      "x": 160,
-      "y": 580
+      "x": 690,
+      "y": 330
     },
     {
       "id": "opensearch",
       "label": "OpenSearch gateway-events",
       "group": "sink",
-      "x": 480,
-      "y": 580
+      "x": 920,
+      "y": 330
     }
   ],
   "edges": [

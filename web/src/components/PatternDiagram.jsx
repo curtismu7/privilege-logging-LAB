@@ -67,13 +67,13 @@ function Canvas({ pattern, positions, onMove, stepper }) {
     let [a, b] = sides(positions[s.from], positions[s.to]);
     // A reply along the same pair of boxes leaves from the side instead, so the two arrows and labels do not overlap.
     if (pattern.steps.slice(0, i).some((o) => o.from === s.to && o.to === s.from)) [a, b] = a === "l" || a === "r" ? ["b", "b"] : ["r", "r"];
-    const cp = s.to === "rule";
+    const cp = s.to === "gateway";
     const now = stepper.step === i;
     const seen = stepper.step >= 0 && i <= stepper.step;
     return {
       id: `e${i}`, source: s.from, target: s.to, sourceHandle: `s-${a}`, targetHandle: `t-${b}`, type: "label",
-      animated: now, data: { text: `${i + 1}. ${s.label}`, dy: offs[i], now, dim: stepper.step >= 0 && !seen },
-      className: `pat-edge${cp ? " pat-edge--cp" : ""}${now ? " pat-edge--now" : ""}${stepper.step >= 0 && !seen ? " pat-edge--dim" : ""}`,
+      animated: now, data: { text: `${i + 1}. ${s.edgeLabel || s.label}`, dy: offs[i], now, dim: stepper.step >= 0 && !seen },
+      className: `pat-edge${cp ? " pat-edge--cp" : ""}${s.dashed ? " pat-edge--none" : ""}${now ? " pat-edge--now" : ""}${stepper.step >= 0 && !seen ? " pat-edge--dim" : ""}`,
       markerEnd: { type: MarkerType.ArrowClosed },
     };
   });
@@ -113,7 +113,7 @@ export default function PatternDiagram({ pattern, resetSignal = 0 }) {
       <ReactFlowProvider>
         <Canvas pattern={pattern} positions={positions} onMove={onMove} stepper={stepper} />
       </ReactFlowProvider>
-      <p className="keys">Drag any box. Mock-issued token values; hosts are examples. Moved: {Object.keys(positions).filter((k) => positions[k].x !== initial[k].x || positions[k].y !== initial[k].y).length} box(es).</p>
+      <p className="keys">Drag any box. Dashed arrows: the sink held nothing, or was not read back. Moved: {Object.keys(positions).filter((k) => positions[k].x !== initial[k].x || positions[k].y !== initial[k].y).length} box(es).</p>
     </section>
   );
 }

@@ -38,7 +38,7 @@ test('diagrams never claim a sink logged something the capture says it did not (
   for (const n of DIAGRAM_NAMES) for (const id of ['response', 'console']) { const s = buildDiagram(n).steps.find((x) => x.to === id); assert.equal(s.dashed, true); assert.match(s.say, /UNVERIFIED/); }
   const mcp = buildDiagram('mcp');
   const lines = capture.cases.filter((c) => c.group === 'MCP').flatMap((c) => c.logged).filter((l) => l.source === 'gateway-log').reduce((n, l) => n + l.lines.length, 0);
-  assert.match(mcp.steps.find((s) => s.to === 'gateway-log').label, new RegExp(`: ${lines} lines$`));
+  assert.equal(mcp.steps.find((s) => s.to === 'gateway-log').edgeLabel, `${lines} lines`);
 });
 
 test('an unknown diagram name falls back to the first one, never a path', () => {
