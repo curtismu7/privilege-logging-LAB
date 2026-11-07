@@ -18,7 +18,7 @@ export async function runChecks({ env = process.env } = {}) {
 
   const cfg = realConfig(env);
   try { add('mode', 'pass', `mode=${modeFrom(env)}${cfg.ok ? ' (Real configured)' : ' (Mock only)'}`); } catch (e) { add('mode', 'fail', e.message); }
-  add('real-settings', 'info', cfg.ok ? `Real is configured: gateway origin ${cfg.gateway.origin}, key set (not shown), ${cfg.search ? `search origin ${cfg.search.origin}` : 'no search URL (paste box)'}` : `Real is not configured (${cfg.problem.split('.')[0]}). Mock keeps working.`);
+  add('real-settings', 'info', cfg.ok ? `Real is configured: gateway origin ${cfg.gateway.origin}, key set (not shown), ${cfg.search ? `search origin ${cfg.search.origin}` : 'no search URL (paste box)'}` : `Real is not configured (${cfg.problem.replace(/^Real is not configured: /, '').split('. ')[0]}). Mock keeps working.`);
 
   try { add('bind', 'pass', `${assertBindAllowed(bindHost(env), env)}${env.PRIV_LOG_BIND ? ' (PRIV_LOG_BIND opt-in)' : ' (loopback)'}`); } catch (e) { add('bind', 'fail', e.message); }
 
