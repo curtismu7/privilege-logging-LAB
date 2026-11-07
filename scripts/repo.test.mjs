@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scanHosts } from '../server/src/safety.js';
+import { isLoopbackHost, scanHosts } from '../server/src/safety.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
@@ -62,7 +62,7 @@ test('no shipped text carries a non-reserved host, a real-looking UUID or an AI-
       if (uuid.test(t) && !/\.test\.(m?js|jsx)$/.test(name)) hits.push(`${rel}: uuid`);
       if (/\.(md|ya?ml)$/.test(name) || name === 'content-pack.json' || name === 'shelf-entry.json' || name === '.env.example') {
         // Docs and data files: github.com and the standards sites are the only real hosts they may name; everything else must be .example/.invalid/loopback
-        const bad = scanHosts(t).filter((h) => !/^(github\.com|raw\.githubusercontent\.com|www\.w3\.org|modelcontextprotocol\.io|local\.ping-devops\.com|privilege-logging-lab\.local\.ping-devops\.com|www\.rfc-editor\.org|registry\.npmjs\.org|playwright\.dev|example\.com)$/.test(h) && !/^[\d.]+$/.test(h) && !h.endsWith('.local'));
+        const bad = scanHosts(t).map((h) => h.replace(/[`'")\]]+$/, '').replace(/:\d+$/, '')).filter((h) => !/^(github\.com|raw\.githubusercontent\.com|www\.w3\.org|modelcontextprotocol\.io|local\.ping-devops\.com|privilege-logging-lab\.local\.ping-devops\.com|www\.rfc-editor\.org|registry\.npmjs\.org|playwright\.dev|example\.com)$/.test(h) && !/^[\d.]+$/.test(h) && !h.endsWith('.local') && !isLoopbackHost(h));
         if (bad.length) hits.push(`${rel}: ${bad.join(', ')}`);
       }
     }
