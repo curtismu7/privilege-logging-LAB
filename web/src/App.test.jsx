@@ -20,7 +20,7 @@ describe("lib", () => {
     expect(fieldsOf([{ field: "user", level: "partial" }, { field: "user", level: "met" }])).toEqual([{ field: "user", level: "met" }]);
   });
   it("visible: control and bidirectional characters become visible escapes", () => {
-    expect(visible("a‮b\u0000c")).toBe("a\\u202eb\\u0000c");
+    expect(visible("a\u202eb\u0000c")).toBe("a\\u202eb\\u0000c");
   });
 });
 
@@ -80,12 +80,12 @@ describe("Mock mode", () => {
     await user.click(screen.getByTestId("nav-trace"));
     const box = await screen.findByTestId("paste-box");
     await user.click(box);
-    await user.paste('Access token found for user: <img src=x onerror=alert(1)>, client: audit-test\nMCP call detected for method tools with target: t‮gnp.');
+    await user.paste('Access token found for user: <img src=x onerror=alert(1)>, client: audit-test\nMCP call detected for method tools with target: t\u202egnp.\nnoise \u202e rtl text');
     await user.click(screen.getByTestId("paste-score"));
     const res = await screen.findByTestId("paste-result");
     expect(res.querySelector("img")).toBeNull();
     expect(res.textContent).toContain("<img src=x onerror=alert(1)>");
-    expect(res.textContent).toContain("\\u202e");
+    expect(res.textContent.split("\\u202e").length - 1).toBeGreaterThanOrEqual(2);
     expect(within(res).getAllByText("met").length).toBeGreaterThanOrEqual(3);
   });
 

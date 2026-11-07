@@ -1,0 +1,26 @@
+{
+  "demos": [
+    {
+      "id": "privilege-logging-lab",
+      "name": "Privilege Logging Lab",
+      "kind": "Tester",
+      "description": "Drive each Privilege gateway use case and see what gets logged, scored against the customer's audit-trail requirement: user, agent, tool and policy decision. Mock replays 17 transactions measured on 2026-11-07; Real (owner-run) sends them to your own gateway and reads the log back. The gaps are listed, not hidden.",
+      "url": "http://localhost:7801",
+      "healthPath": "/api/health",
+      "composeFile": "privilege-logging-LAB/docker-compose.yml",
+      "composeOverlays": [],
+      "pingProducts": [],
+      "notes": "Host-run: ./scripts/run.sh (port 7801). Mock needs no tenant, key or network. Docker: HOST_PORT=7801 docker compose up --build -d (published on 127.0.0.1 only; Mock by default). Real: set PRIV_LOG_GATEWAY_URL and PRIV_LOG_AGENT_KEY (and optionally PRIV_LOG_SEARCH_URL, PRIV_LOG_SEARCH_INDEX) in ~/Development/.env, then use the Real toggle and confirm the origins. No catalog row matches yet, so no catalogId; the owner assigns one with the board row.",
+      "repo": "https://github.com/curtismu7/privilege-logging-LAB",
+      "tags": [
+        "pingone-privilege",
+        "agent-gateway",
+        "audit-observability",
+        "mcp-security",
+        "simulated",
+        "real"
+      ],
+      "where": "installed"
+    }
+  ]
+}

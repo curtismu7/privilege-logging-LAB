@@ -1,0 +1,195 @@
+{
+  "schema": "demo-content-pack/1",
+  "id": "privilege-logging-lab",
+  "title": "Privilege Logging Lab",
+  "version": "0.1.0",
+  "demo": {
+    "id": "privilege-logging-lab",
+    "name": "Privilege Logging Lab",
+    "catalog": "D999",
+    "baseUrl": "http://localhost:7801",
+    "doctor": "/api/health",
+    "tags": [
+      "logging",
+      "audit-trail",
+      "privilege",
+      "mcp",
+      "tester",
+      "mock-and-real"
+    ]
+  },
+  "glossary": [
+    {
+      "id": "audit-requirement",
+      "term": "The four-clause audit requirement",
+      "definition": "The gateway provides an end-to-end audit trail for all MCP interactions that clearly emits (a) the user on whose behalf the call was made, (b) the agent identity acting for the user, (c) which tool was called and (d) the authorization policy decision. Each use case is scored against these four.",
+      "aliases": [
+        "audit trail"
+      ]
+    },
+    {
+      "id": "met-partial-missing",
+      "term": "Met, partial, missing, n/a",
+      "definition": "Met: a log line names it. Partial: it is only implied or half there (an app-level permission line instead of a per-call allow line, an OAuth client id that names a client but not an agent). Missing: nothing in the log says it. n/a: the use case cannot have it.",
+      "aliases": [
+        "score"
+      ]
+    },
+    {
+      "id": "log-sink",
+      "term": "Log sink",
+      "definition": "A place a record could land: the gateway pod log, the X-Gw-Audit-Trail response header, the console Activity Log, an Elasticsearch index, an OpenSearch index. Only the pod log carried per-call lines in the capture.",
+      "aliases": [
+        "sink"
+      ]
+    },
+    {
+      "id": "unverified",
+      "term": "UNVERIFIED",
+      "definition": "Not measured. The lab never turns an unmeasured thing into a pass or a fail: the response header and the console were not captured, so they are labelled UNVERIFIED.",
+      "aliases": []
+    }
+  ],
+  "sources": [
+    {
+      "id": "mcp-transport",
+      "title": "Model Context Protocol: streamable HTTP transport",
+      "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/transports",
+      "kind": "standard",
+      "use": "The initialize, notifications/initialized and call sequence with Mcp-Session-Id that Real mode sends.",
+      "status": "not-read",
+      "checked": "2026-11-07"
+    },
+    {
+      "id": "trace-context",
+      "title": "W3C Trace Context",
+      "url": "https://www.w3.org/TR/trace-context/",
+      "kind": "standard",
+      "use": "The traceparent header shown on every hop.",
+      "status": "not-read",
+      "checked": "2026-11-07"
+    }
+  ],
+  "cards": [
+    {
+      "id": "try-run",
+      "label": "Run a use case",
+      "description": "Replay (Mock) or send (Real) any of the 17 use cases, one by one or all.",
+      "group": "try-it",
+      "action": {
+        "type": "route",
+        "href": "/#run"
+      },
+      "terms": [
+        "audit-requirement"
+      ],
+      "story": "S02"
+    },
+    {
+      "id": "try-trace",
+      "label": "Read the trace",
+      "description": "The request, the response and what each sink logged, with the user, agent, tool and decision marked inline.",
+      "group": "try-it",
+      "action": {
+        "type": "route",
+        "href": "/#trace"
+      },
+      "terms": [
+        "log-sink"
+      ],
+      "story": "S03"
+    },
+    {
+      "id": "try-scorecard",
+      "label": "The scorecard",
+      "description": "Use cases by requirement clause, with a Markdown export for a customer email.",
+      "group": "try-it",
+      "action": {
+        "type": "route",
+        "href": "/#scorecard"
+      },
+      "terms": [
+        "met-partial-missing"
+      ],
+      "story": "S04"
+    },
+    {
+      "id": "concept-sinks",
+      "label": "Where it's logged",
+      "description": "Five places a record could land, what each held, and what we cannot see.",
+      "group": "concept",
+      "action": {
+        "type": "route",
+        "href": "/#sinks"
+      },
+      "terms": [
+        "log-sink",
+        "unverified"
+      ],
+      "story": "S06"
+    },
+    {
+      "id": "concept-diagram",
+      "label": "Flow diagrams",
+      "description": "One diagram per flow: caller, gateway, backend, with the log sinks hanging off the gateway.",
+      "group": "concept",
+      "action": {
+        "type": "route",
+        "href": "/#diagram"
+      },
+      "story": "S01"
+    },
+    {
+      "id": "ref-doctor",
+      "label": "Doctor and health",
+      "description": "Preflight checks and the demo-health/1 endpoint.",
+      "group": "setup",
+      "action": {
+        "type": "route",
+        "href": "/api/health"
+      }
+    }
+  ],
+  "stories": [
+    {
+      "id": "S01",
+      "title": "Start with the requirement",
+      "say": "The customer asked for an end-to-end audit trail for every MCP interaction: who the call was for, which agent made it, which tool, and what the policy decided. This lab shows, use case by use case, what the gateway actually logged, and where it does not."
+    },
+    {
+      "id": "S02",
+      "title": "Run a case",
+      "say": "Pick a case on the Run page. In Mock mode this replays a transaction we measured on the capture date; nothing is sent. In Real mode the owner sends it to their own gateway and reads the log back."
+    },
+    {
+      "id": "S03",
+      "title": "Read the trace",
+      "say": "The Trace page shows the request, the response and, per log sink, the lines that were written. The user, agent, tool and decision values are marked inline so the customer sees exactly which words satisfy which clause."
+    },
+    {
+      "id": "S04",
+      "title": "Show the scorecard",
+      "say": "Met means a line names it. Partial means it is only implied or only half there, for example an app-level permission line instead of a per-call allow. Missing means nothing in the log says it. Copy the table into the customer email as it is."
+    },
+    {
+      "id": "S05",
+      "title": "Say the gaps out loud",
+      "say": "Rejected calls name nobody. Aggregate routes log almost nothing for the member calls. The LLM route logged nothing we could find. No allowed call has an explicit allow line. Naming these is what makes the rest credible."
+    },
+    {
+      "id": "S06",
+      "title": "Where it is logged",
+      "say": "There are five places a record could land. Only the gateway pod log carried per-call lines, the SIEM index held console changes only, and the shipper to OpenSearch has not delivered since late October. The response header is described but was not captured, so we say UNVERIFIED."
+    },
+    {
+      "id": "S07",
+      "title": "Real mode and the paste box",
+      "say": "Real mode sends the call to the gateway you configured and queries your search endpoint for events in the call window. With no search endpoint, paste the gateway log lines and the same scorer reads them."
+    },
+    {
+      "id": "S08",
+      "title": "Close honestly",
+      "say": "Offer the scorecard as the current measured state, not a promise. Anything marked UNVERIFIED is an open question, and a re-run after a gateway change updates the table."
+    }
+  ]
+}
