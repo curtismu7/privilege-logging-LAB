@@ -1,0 +1,72 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { modeFrom, parseSettings, readSettings, realAvailableFrom, realConfig, settingsFile } from '../src/config.js';
+import { KEY, NOENV } from './helpers.js';
+import { bindHost, assertBindAllowed, isPrivateAddress, portProblem, resolvePort, scanHosts } from '../src/safety.js';
+
+const base = { ...NOENV, PRIV_LOG_GATEWAY_URL: 'https://gateway.example/demo-mcp-app/mcp', PRIV_LOG_AGENT_KEY: KEY };
+const cfg = (extra = {}) => realConfig({ ...base, ...extra }, { file: false });
+
+test('Real needs a gateway URL and a key; otherwise it is unavailable with a reason that names the setting', () => {
+  assert.equal(realConfig(NOENV, { file: false }).ok, false);
+  assert.match(realConfig(NOENV, { file: false }).problem, /PRIV_LOG_GATEWAY_URL/);
+  assert.match(cfg({ PRIV_LOG_AGENT_KEY: '' }).problem, /PRIV_LOG_AGENT_KEY/);
+  assert.equal(cfg().ok, true);
+});
+
+test('the gateway URL: https anywhere, http only on loopback; no credentials, query, fragment, private literals, other schemes', () => {
+  for (const u of ['https://gateway.example/x', 'http://127.0.0.1:9000/x', 'http://localhost:9000/x', 'http://[::1]:9000/x', 'https://127.0.0.1:9443/x']) assert.equal(cfg({ PRIV_LOG_GATEWAY_URL: u }).ok, true, u);
+  for (const u of ['http://gateway.example/x', 'ftp://gateway.example/', 'file:///etc/passwd', 'https://user:pw@gateway.example/', 'https://gateway.example/x?a=1', 'https://gateway.example/x#f',
+    'https://169.254.169.254/latest', 'https://10.0.0.5/', 'https://192.168.1.1/', 'https://[fd00::1]/', 'https://[::ffff:10.0.0.1]/', 'https://0.0.0.0/', 'nonsense', 'http://10.0.0.5/']) assert.equal(cfg({ PRIV_LOG_GATEWAY_URL: u }).ok, false, u);
+});
+
+test('the search URL is an origin (no path), same rules; the index name is a plain pattern', () => {
+  assert.equal(cfg({ PRIV_LOG_SEARCH_URL: 'https://search.example' }).ok, true);
+  assert.equal(cfg({ PRIV_LOG_SEARCH_URL: 'http://127.0.0.1:9200', PRIV_LOG_SEARCH_INDEX: 'gateway-events,other-*' }).ok, true);
+  for (const u of ['https://search.example/idx/_search', 'http://search.example', 'https://169.254.169.254']) assert.equal(cfg({ PRIV_LOG_SEARCH_URL: u }).ok, false, u);
+  for (const i of ['../x', '_all/../x', 'a b', '.hidden', 'x'.repeat(101), 'a/b']) assert.equal(cfg({ PRIV_LOG_SEARCH_URL: 'https://search.example', PRIV_LOG_SEARCH_INDEX: i }).ok, false, i);
+});
+
+test('a key with a space or control character is refused', () => {
+  assert.equal(cfg({ PRIV_LOG_AGENT_KEY: 'abc def' }).ok, false);
+  assert.equal(cfg({ PRIV_LOG_AGENT_KEY: 'abc\ndef' }).ok, false);
+});
+
+test('settings file: STANDALONE_ENV overrides the path, the environment wins, only our four names are read', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pll-'));
+  const file = path.join(dir, 'settings.env');
+  fs.writeFileSync(file, `# comment\nPRIV_LOG_GATEWAY_URL="https://file.example/mcp"\nexport PRIV_LOG_AGENT_KEY='${KEY}'\nPRIV_LOG_SEARCH_INDEX=idx # trailing\nUNRELATED_SECRET=nope\n`);
+  assert.equal(settingsFile({ STANDALONE_ENV: file }), file);
+  const s = readSettings({ STANDALONE_ENV: file });
+  assert.deepEqual(Object.keys(s).sort(), ['PRIV_LOG_AGENT_KEY', 'PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_SEARCH_INDEX']);
+  assert.equal(s.PRIV_LOG_SEARCH_INDEX, 'idx');
+  assert.equal(readSettings({ STANDALONE_ENV: file, PRIV_LOG_GATEWAY_URL: 'https://env.example/mcp' }).PRIV_LOG_GATEWAY_URL, 'https://env.example/mcp');
+  assert.equal(realAvailableFrom({ STANDALONE_ENV: file }), true);
+  assert.equal(settingsFile({ HOME: '/home/x' }), path.join('/home/x', 'Development', '.env'));
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('launch mode: Real if configured else Mock; MODE=real without settings is refused; a bad MODE is refused', () => {
+  const o = { file: false };
+  assert.equal(modeFrom(NOENV, o), 'mock');
+  assert.equal(modeFrom(base, o), 'real');
+  assert.equal(modeFrom({ ...base, MODE: 'mock' }, o), 'mock');
+  assert.throws(() => modeFrom({ ...NOENV, MODE: 'real' }, o), /MODE=real/);
+  assert.throws(() => modeFrom({ ...NOENV, MODE: 'live' }, o), /not available/);
+});
+
+test('safety: private/reserved address detection, port, bind, and host scan', () => {
+  for (const a of ['10.1.2.3', '172.16.0.1', '192.168.0.9', '169.254.169.254', '100.64.0.1', '127.0.0.1', '0.0.0.0', '::1', 'fd12::1', 'fe80::1', '::ffff:10.0.0.1']) assert.equal(isPrivateAddress(a), true, a);
+  for (const a of ['8.8.8.8', '1.1.1.1', '2001:db8::1', 'gateway.example']) assert.equal(isPrivateAddress(a), false, a);
+  assert.equal(portProblem(7801), null);
+  for (const p of [7800, 7802, 8080, 5173, 80, 'x']) assert.ok(portProblem(p), String(p));
+  assert.equal(resolvePort({}), 7801);
+  assert.throws(() => resolvePort({ PORT: '7800' }));
+  assert.equal(bindHost({}), '127.0.0.1');
+  assert.throws(() => assertBindAllowed('0.0.0.0', {}), /loopback only/);
+  assert.equal(assertBindAllowed('0.0.0.0', { PRIV_LOG_BIND: '0.0.0.0' }), '0.0.0.0');
+  assert.deepEqual(scanHosts('see https://gateway.example/x and http://127.0.0.1:1/ and https://real.corp.net/'), ['real.corp.net']);
+});
