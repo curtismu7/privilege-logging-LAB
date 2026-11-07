@@ -2,7 +2,7 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCapture } from '../src/capture.js';
 import { installNetguard } from '../src/netguard.js';
-import { KEY, NOENV, fakeGateway, fakeSearch, get, post, rawHttp, realEnv, recorder, withServer } from './helpers.js';
+import { KEY, NOENV, fakeGateway, fakeSearch, fakeK8s, gatewayLog, get, post, rawHttp, realEnv, recorder, runAndFetch, withServer } from './helpers.js';
 
 const capture = loadCapture();
 let guard;
@@ -76,7 +76,7 @@ test('the key is write-only: no route returns it, and info shows presence only',
       for (const p of ['/api/info', '/api/cases', '/api/sinks', '/api/story', '/api/scorecard', '/api/runs', '/api/diagram', '/api/health', '/api/shelf']) await grab(await get(url, p));
       await grab(await post(url, '/api/confirm', { gateway: new URL(gw.base).origin }));
       // the fake gateway echoes the Authorization header on a 401 (the key does not match), so a leak would show up here
-      for (const id of ['mcp-allowed-key', 'mcp-tool-not-granted', 'no-credential']) await grab(await post(url, '/api/run', { caseId: id, waitMs: 0 }));
+      for (const id of ['mcp-allowed-key', 'mcp-tool-not-granted', 'no-credential']) await grab(await post(url, '/api/run', { caseId: id }));
       await grab(await get(url, '/api/runs')); await grab(await get(url, '/api/scorecard'));
       const all = seen.join('\n');
       assert.ok(!all.includes(KEY), 'the key appears in an API answer');
@@ -92,20 +92,25 @@ test('Mock replays all 17 cases with the recorded response, lines and score, and
     await withServer(async (url) => {
       await post(url, '/api/mode', { source: 'mock' });
       const cases = (await json(await get(url, '/api/cases'))).body.cases;
-      assert.equal(cases.length, 17);
+      assert.equal(cases.length, 17 + capture.realOnly.length);
       for (const c of capture.cases) {
-        const { status, body } = await json(await post(url, '/api/run', { caseId: c.id }));
+        const phase1 = await json(await post(url, '/api/run', { caseId: c.id }));
+        assert.equal(phase1.status, 200, c.id);
+        assert.equal(phase1.body.retrieval.state, 'pending', 'phase 1 carries no log lines yet');
+        assert.deepEqual(phase1.body.logged, []);
+        const { status, body } = await json(await post(url, '/api/fetch-log', { caseId: c.id }));
         assert.equal(status, 200, c.id);
         assert.equal(body.source, 'mock');
+        assert.equal(body.retrieval.state, 'found'); assert.equal(body.retrieval.method, 'recorded');
         assert.deepEqual(body.score, c.score);
         assert.deepEqual(body.outcome, c.outcome);
-        assert.deepEqual(body.logged, c.logged);
+        assert.deepEqual(body.logged.map(({ methods, ...l }) => l), c.logged);
         assert.ok(body.hops.length === 2 && body.hops.every((h) => /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/.test(h.traceparent)));
         assert.match(body.hops[1].request, /NOT sent/);
       }
       const card = (await json(await get(url, '/api/scorecard'))).body;
-      assert.equal(card.rows.length, 17);
-      assert.deepEqual(card.rows.map((r) => r.score), capture.cases.map((c) => c.score));
+      assert.equal(card.rows.length, 17 + capture.realOnly.length);
+      assert.deepEqual(card.rows.slice(0, 17).map((r) => r.score), capture.cases.map((c) => c.score));
     }, realOpts(gw, search));
     assert.deepEqual(gw.requests, [], 'the configured gateway received nothing');
     assert.deepEqual(search.requests, [], 'the configured search endpoint received nothing');
@@ -113,10 +118,10 @@ test('Mock replays all 17 cases with the recorded response, lines and score, and
   } finally { await gw.close(); await search.close(); }
 });
 
-test('run validation: unknown case 404, strict body 400, waitMs bounds, cross-origin and bad-host writes refused', async () => {
+test('run validation: unknown case 404, strict body 400, since bounds, cross-origin and bad-host writes refused', async () => {
   await withServer(async (url) => {
     assert.equal((await post(url, '/api/run', { caseId: 'nope' })).status, 404);
-    for (const bad of [{}, { caseId: 5 }, { caseId: 'mcp-allowed-key', extra: 1 }, { caseId: 'mcp-allowed-key', waitMs: -1 }, { caseId: 'mcp-allowed-key', waitMs: 99999 }, { caseId: 'mcp-allowed-key', waitMs: 1.5 }, []]) assert.equal((await post(url, '/api/run', bad)).status, 400, JSON.stringify(bad));
+    for (const bad of [{}, { caseId: 5 }, { caseId: 'mcp-allowed-key', extra: 1 }, { caseId: 'mcp-allowed-key', waitMs: 5 }, { caseId: 'mcp-allowed-key', since: 'yesterday' }, []]) assert.equal((await post(url, '/api/run', bad)).status, 400, JSON.stringify(bad));
     assert.equal((await post(url, '/api/run', { caseId: 'mcp-allowed-key' }, { origin: 'https://evil.example' })).status, 403);
     assert.equal((await post(url, '/api/run', { caseId: 'mcp-allowed-key' }, { 'sec-fetch-site': 'cross-site' })).status, 403);
     const bad = await rawHttp(`${url}/api/info`, { headers: { host: 'evil.example' } });
@@ -131,7 +136,7 @@ test('Real: nothing is sent before the origins are confirmed (412), a wrong conf
   const search = await fakeSearch({ events: EVENTS() });
   try {
     await withServer(async (url) => {
-      const early = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 }));
+      const early = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key' }));
       assert.equal(early.status, 412); assert.equal(early.body.error, 'confirm_required');
       assert.equal(early.body.gatewayOrigin, new URL(gw.base).origin);
       assert.deepEqual(gw.requests, []); assert.deepEqual(search.requests, []);
@@ -140,23 +145,27 @@ test('Real: nothing is sent before the origins are confirmed (412), a wrong conf
       assert.equal((await confirm(url, gw)).status, 200);
       assert.equal((await json(await get(url, '/api/info'))).body.real.confirmed, true);
 
-      const { status, body } = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 }));
-      assert.equal(status, 200);
+      const { final: body } = await runAndFetch(url, 'mcp-allowed-key');
       assert.equal(body.source, 'real');
-      // three MCP hops then the search hop, every one with traceparent and the same trace id
+      assert.equal(body.retrieval.state, 'found');
+      assert.equal(body.retrieval.method, 'window', 'the marker is not in these events, so the time window found them: inferred');
+      assert.match(body.marker, /^audit-[0-9a-f]{8}$/);
+      // three MCP hops then a search hop, every one with traceparent; the MCP hops share one trace id
       assert.deepEqual(gw.requests.map((r) => JSON.parse(r.body).method), ['initialize', 'notifications/initialized', 'tools/call']);
       assert.equal(gw.requests[0].url, '/demo-mcp-app/mcp');
-      const traces = [...gw.requests, ...search.requests].map((r) => /^00-([0-9a-f]{32})-[0-9a-f]{16}-01$/.exec(r.headers.traceparent)?.[1]);
-      assert.ok(traces.every(Boolean) && new Set(traces).size === 1, 'traceparent with one trace id on every hop');
-      assert.equal(new Set([...gw.requests, ...search.requests].map((r) => r.headers.traceparent)).size, 4, 'a fresh span per hop');
+      const traces = gw.requests.map((r) => /^00-([0-9a-f]{32})-[0-9a-f]{16}-01$/.exec(r.headers.traceparent)?.[1]);
+      assert.ok(traces.every(Boolean) && new Set(traces).size === 1, 'traceparent with one trace id on every MCP hop');
+      assert.ok(search.requests.every((r) => /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/.test(r.headers.traceparent)), 'traceparent on every search hop too');
+      assert.equal(new Set([...gw.requests, ...search.requests].map((r) => r.headers.traceparent)).size, gw.requests.length + search.requests.length, 'a fresh span per hop');
       assert.equal(body.traceId, traces[0]);
       assert.equal(gw.requests[0].headers['mcp-session-id'], undefined);
       assert.equal(gw.requests[1].headers['mcp-session-id'], 'sess-fake-1');
       assert.equal(gw.requests[2].headers['mcp-session-id'], 'sess-fake-1');
       assert.ok(gw.requests.every((r) => r.headers.authorization === `Bearer ${KEY}`));
-      assert.deepEqual(JSON.parse(gw.requests[2].body).params, { name: 'get_weather', arguments: { city: 'audit-K01' } });
+      assert.deepEqual(JSON.parse(gw.requests[2].body).params, { name: 'get_weather', arguments: { city: body.marker } }, 'the run marker travels in the tool argument');
+      assert.equal(body.markerWhere, 'params.arguments.city');
       // the search read back the window and excluded the old event
-      assert.equal(search.requests.length, 1);
+      assert.ok(search.requests.length >= 1);
       assert.equal(search.requests[0].method, 'POST'); assert.equal(search.requests[0].url, '/gateway-events/_search');
       const sink = body.logged.find((l) => l.source === 'search');
       assert.equal(sink.lines.length, 3);
@@ -165,15 +174,17 @@ test('Real: nothing is sent before the origins are confirmed (412), a wrong conf
       // scored from what came back, with the key redacted in the raw hops
       assert.equal(body.scored, true); assert.equal(body.needsPaste, false);
       assert.deepEqual(body.score, { user: 'met', agent: 'met', tool: 'met', decision: 'met' }, 'the response header adds a decision');
-      assert.equal(body.hops.length, 4);
+      assert.ok(body.hops.length >= 4);
+      assert.equal(typeof body.scoreInferred.user, 'boolean');
+      assert.ok(body.logged.find((l) => l.source === 'search').methods.every((m) => m === 'window'));
       assert.ok(body.hops[0].request.includes('authorization: Bearer ***'));
       assert.ok(!JSON.stringify(body).includes(KEY));
       assert.equal(body.outcome.http, 200); assert.equal(body.outcome.isError, false);
-      assert.ok(body.marks['gateway-log'] === undefined && body.marks.search['0'].some((m) => m.field === 'user'));
+      assert.ok(body.marks['gateway-log'] === undefined && Object.values(body.marks.search).flat().some((m) => m.field === 'user'));
       // the next case needs no second confirmation; reset forgets it
-      assert.equal((await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 })).status, 200);
+      assert.equal((await post(url, '/api/run', { caseId: 'mcp-allowed-key' })).status, 200);
       await post(url, '/api/reset', {});
-      assert.equal((await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 })).status, 412);
+      assert.equal((await post(url, '/api/run', { caseId: 'mcp-allowed-key' })).status, 412);
     }, realOpts(gw, search));
   } finally { await gw.close(); await search.close(); }
 });
@@ -183,8 +194,9 @@ test('Real without a search URL: the run shows the exchange, is NOT scored, and 
   try {
     await withServer(async (url) => {
       await confirm(url, gw);
-      const run = (await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 }))).body;
+      const run = (await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key' }))).body;
       assert.equal(run.needsPaste, true); assert.equal(run.scored, false); assert.equal(run.score, null);
+      assert.equal(run.retrieval.state, 'not_configured'); assert.match(run.retrieval.detail, /Paste/);
       assert.equal((await json(await get(url, '/api/scorecard'))).body.rows.find((r) => r.id === 'mcp-allowed-key').needsPaste, true);
       const text = capture.cases.find((c) => c.id === 'mcp-allowed-key').logged[0].lines.join('\n');
       const scored = (await json(await post(url, '/api/score', { text, caseId: 'mcp-allowed-key' }))).body;
@@ -210,20 +222,20 @@ test('Real: refusals arrive as JSON-RPC isError on HTTP 200, a rejected credenti
   try {
     await withServer(async (url) => {
       await confirm(url, gw);
-      const refused = (await json(await post(url, '/api/run', { caseId: 'mcp-tool-not-granted', waitMs: 0 }))).body;
+      const refused = (await json(await post(url, '/api/run', { caseId: 'mcp-tool-not-granted' }))).body;
       assert.equal(refused.outcome.http, 200); assert.equal(refused.outcome.isError, true); assert.match(refused.outcome.note, /isError/);
       const n0 = gw.requests.length;
-      const noCred = (await json(await post(url, '/api/run', { caseId: 'no-credential', waitMs: 0 }))).body;
-      assert.equal(noCred.outcome.http, 401); assert.equal(noCred.hops.length, 2, 'one gateway hop and the search hop');
+      const noCred = (await json(await post(url, '/api/run', { caseId: 'no-credential' }))).body;
+      assert.equal(noCred.outcome.http, 401); assert.equal(noCred.hops.length, 1, 'one gateway hop');
       assert.equal(gw.requests.length - n0, 1);
       assert.equal(gw.requests.at(-1).headers.authorization, undefined);
-      const unknown = (await json(await post(url, '/api/run', { caseId: 'unknown-key', waitMs: 0 }))).body;
+      const unknown = (await json(await post(url, '/api/run', { caseId: 'unknown-key' }))).body;
       assert.equal(unknown.outcome.http, 401);
       assert.match(gw.requests.at(-1).headers.authorization, /^Bearer lab-unknown-[0-9a-f]{12}$/);
       assert.notEqual(gw.requests.at(-1).headers.authorization, `Bearer ${KEY}`);
-      const list = (await json(await post(url, '/api/run', { caseId: 'mcp-list-filtered', waitMs: 0 }))).body;
+      const list = (await json(await post(url, '/api/run', { caseId: 'mcp-list-filtered' }))).body;
       assert.equal(list.outcome.http, 200); assert.equal(list.outcome.isError, false);
-      const agg = (await json(await post(url, '/api/run', { caseId: 'aggregate-allowed', waitMs: 0 }))).body;
+      const agg = (await json(await post(url, '/api/run', { caseId: 'aggregate-allowed' }))).body;
       assert.equal(gw.requests.at(-1).url, '/aggregate-door/mcp', 'a case with an app uses that app segment');
       assert.equal(agg.outcome.http, 200);
     }, realOpts(gw, search));
@@ -238,7 +250,7 @@ test('Real: A2A, LLM and intent cases are not runnable (409 with the reason) and
       const cases = (await json(await get(url, '/api/cases'))).body.cases;
       assert.deepEqual(cases.filter((c) => !c.realRunnable).map((c) => c.id).sort(), ['a2a-call', 'intent-encoder-unreachable', 'llm-allowed', 'llm-injection', 'llm-model-denied']);
       for (const id of ['a2a-call', 'llm-allowed', 'intent-encoder-unreachable']) {
-        const r = await json(await post(url, '/api/run', { caseId: id, waitMs: 0 }));
+        const r = await json(await post(url, '/api/run', { caseId: id }));
         assert.equal(r.status, 409); assert.equal(r.body.error, 'not_runnable'); assert.match(r.body.detail, /Paste|UNVERIFIED/);
       }
       assert.deepEqual(gw.requests, []);
@@ -256,32 +268,32 @@ test('Real: a gateway redirect is not followed, not even to another host; a hang
   try {
     await withServer(async (url) => {
       await confirm(url, redir);
-      const r = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 }));
+      const r = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key' }));
       assert.equal(r.status, 200); assert.equal(r.body.outcome.http, 302); assert.match(r.body.outcome.note, /redirect not followed/);
       assert.deepEqual(target.requests, []);
     }, realOpts(redir));
     await withServer(async (url) => {
       await confirm(url, hang);
-      const r = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 }));
+      const r = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key' }));
       assert.equal(r.status, 504); assert.equal(r.body.error, 'timeout'); assert.equal(r.body.hops.length, 0);
     }, { ...realOpts(hang), realTimeoutMs: 200 });
     await withServer(async (url) => {
       await post(url, '/api/confirm', { gateway: new URL(downUrl).origin });
-      const r = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 }));
+      const r = await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key' }));
       assert.equal(r.status, 502); assert.equal(r.body.error, 'connect_refused');
     }, { env: { ...NOENV, PRIV_LOG_GATEWAY_URL: downUrl, PRIV_LOG_AGENT_KEY: KEY }, sleep: async () => {} });
   } finally { await target.close(); await redir.close(); await hang.close(); }
 });
 
-test('Real: a failing or malformed search endpoint leaves the run unscored with the reason (no invented score)', async () => {
+test('Real: a failing or malformed search endpoint is "log source not reachable" with the reason and a Retry; nothing is scored (no invented score)', async () => {
   const gw = await fakeGateway();
   for (const search of [await fakeSearch({ status: 500, raw: '{"error":"boom"}' }), await fakeSearch({ raw: '{"nothing":true}' }), await fakeSearch({ raw: 'not json at all' })]) {
     try {
       await withServer(async (url) => {
         await confirm(url, gw);
-        const r = (await json(await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 }))).body;
-        assert.equal(r.scored, false); assert.equal(r.score, null); assert.equal(r.needsPaste, true);
-        assert.match(r.searchProblem, /search/);
+        const { final: r } = await runAndFetch(url, 'mcp-allowed-key');
+        assert.equal(r.retrieval.state, 'unreachable'); assert.match(r.retrieval.detail, /Log source not reachable.*search/);
+        assert.equal(r.scored, false); assert.equal(r.score, null);
       }, realOpts(gw, search));
     } finally { await search.close(); }
   }
@@ -294,7 +306,7 @@ test('Real contacts ONLY the two configured origins: a search answer cannot send
   try {
     await withServer(async (url) => {
       await confirm(url, gw);
-      await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 });
+      await runAndFetch(url, 'mcp-allowed-key');
       assert.deepEqual(other.requests, []);
     }, realOpts(gw, search));
   } finally { await gw.close(); await search.close(); await other.close(); }
@@ -316,7 +328,8 @@ test('scorecard Markdown: one row per case, the four fields, escaped pipes, the 
   await withServer(async (url) => {
     const md = (await json(await get(url, '/api/scorecard'))).body.markdown;
     const rows = md.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Use case') && !l.startsWith('| ---'));
-    assert.equal(rows.length, 17);
+    assert.equal(rows.length, 17 + capture.realOnly.length);
+    assert.equal(rows.filter((r) => /\| not measured \| not measured \| not measured \| not measured \|/.test(r)).length, capture.realOnly.length, 'unmeasured cases say so, never a result');
     assert.match(md, /Measured on 2026-11-07 \(replay of recorded transactions, not a live test\)/);
     assert.match(md, /\| Allowed tool call, signed-in user \| MCP \| met \| partial \| met \| partial \|/);
     assert.match(md, /\| Intent encoder not reachable from the gateway \| Intent \| n\/a \| n\/a \| n\/a \| partial \|/);
@@ -354,7 +367,7 @@ test('runs are kept per source: a Real run never shows up in Mock views (and the
   try {
     await withServer(async (url) => {
       await confirm(url, gw);
-      await post(url, '/api/run', { caseId: 'mcp-allowed-key', waitMs: 0 });
+      await post(url, '/api/run', { caseId: 'mcp-allowed-key' });
       assert.equal((await json(await get(url, '/api/runs'))).body.runs.length, 1);
       await post(url, '/api/mode', { source: 'mock' });
       assert.equal((await json(await get(url, '/api/runs'))).body.runs.length, 0);

@@ -8,6 +8,7 @@ export const NOENV = { STANDALONE_ENV: '/nonexistent/settings.env' };
 
 // env: the settings the app sees (never process.env, never the developer's settings file).
 export async function withServer(fn, { env = NOENV, useSettingsFile = false, ...rest } = {}) {
+  rest = { retryMs: 20, maxMs: 700, fallbackMs: 250, mockDelayMs: 0, ...rest };
   const health = createHealth({ intervalMs: 3_600_000 });
   await health.ready;
   const { server, url } = await startHttpServer({ port: 0, host: '127.0.0.1', app: createApp({ health, env, useSettingsFile, ...rest }) });
@@ -21,11 +22,11 @@ const readBody = (req) => new Promise((resolve) => { const c = []; req.on('data'
 const listen = async (server) => { await new Promise((r) => server.listen(0, '127.0.0.1', r)); return `http://127.0.0.1:${server.address().port}`; };
 
 // A FAKE Privilege gateway speaking MCP streamable HTTP on loopback. Never a real gateway.
-export async function fakeGateway({ key = KEY, audit = null, redirectTo = null, bigBody = false, hang = false } = {}) {
+export async function fakeGateway({ key = KEY, audit = null, redirectTo = null, bigBody = false, hang = false, holdCalls = false } = {}) {
   const requests = [];
   const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
-    requests.push({ method: req.method, url: req.url, headers: req.headers, body });
+    requests.push({ method: req.method, url: req.url, headers: req.headers, body, at: Date.now() });
     if (hang) return; // never answers: the client's time cap must fire
     if (redirectTo) { res.writeHead(302, { location: redirectTo }); return res.end(); }
     if (bigBody) { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end('x'.repeat(2_000_000)); }
@@ -36,6 +37,7 @@ export async function fakeGateway({ key = KEY, audit = null, redirectTo = null, 
     if (req.headers['mcp-session-id'] !== 'sess-fake-1') { res.writeHead(400, { 'content-type': 'application/json' }); return res.end('{"error":"no session"}'); }
     if (msg.method === 'notifications/initialized') { res.writeHead(202); return res.end(); }
     if (msg.method === 'tools/call') {
+      if (holdCalls) return; // a call held for human approval: no answer until the approver acts
       if (msg.params.name === 'no_such_tool') return json({ jsonrpc: '2.0', id: msg.id, result: { isError: true, content: [{ type: 'text', text: 'Forbidden: tool not granted' }] } });
       return json({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: 'sunny' }] } });
     }
@@ -84,4 +86,57 @@ export function rawHttp(url, { method = 'GET', headers = {}, body } = {}) {
     });
     req.on('error', reject); if (body) req.write(body); req.end();
   });
+}
+
+// Run a case (phase 1) and keep fetching its log entry (phase 2) until the answer is not "pending". Returns { run, final, polls }.
+export async function runAndFetch(url, caseId, { headers = {}, max = 80, pauseMs = 25, body = {} } = {}) {
+  const r = await post(url, '/api/run', { caseId, ...body }, headers);
+  const run = await r.json();
+  if (r.status !== 200) return { status: r.status, run, final: run, polls: 0 };
+  let final = run; let polls = 0; let restart = false;
+  while (polls < max && (final.retrieval?.state === 'pending')) {
+    await new Promise((res) => setTimeout(res, pauseMs));
+    final = await (await post(url, '/api/fetch-log', { caseId, ...(restart ? { restart } : {}) }, headers)).json();
+    polls += 1;
+  }
+  return { status: 200, run, final, polls };
+}
+
+// kubectl-style log lines (RFC 3339 prefix + a logrus line) for what a gateway would write for the calls a FAKE gateway received.
+export function gatewayLog(gw, { payload = true, user = 'u-live', client = 'audit-test', other = [] } = {}) {
+  const out = [];
+  for (const r of gw.requests) {
+    let m; try { m = JSON.parse(r.body); } catch { continue; }
+    if (m.method !== 'tools/call' && m.method !== 'tools/list') continue;
+    const iso = new Date(r.at).toISOString();
+    const L = (msg) => `${iso} time="${iso}" level=info msg="${msg}"`;
+    out.push(L(`Access token found for user: ${user}, client: ${client}`));
+    out.push(L(`Principal {User ${user}} has policy based capabilities for {Application demo-mcp-app}`));
+    if (m.method === 'tools/call') out.push(L(`MCP call detected for method tools with target: ${m.params.name}`));
+    if (payload) out.push(L(`incoming request: POST ${r.url} ... payload: ${JSON.stringify(m).replace(/"/g, "'")}`));
+  }
+  return [...out, ...other];
+}
+
+// A FAKE kubectl proxy on loopback. logText(url) returns the pod log text; pods = PodList items for selector lookups.
+export async function fakeK8s({ logText = () => '', pods = [], status = 200, listStatus = 200, bigBody = false, hang = false, redirectTo = null, delayMs = 0 } = {}) {
+  const requests = [];
+  const server = http.createServer(async (req, res) => {
+    requests.push({ method: req.method, url: req.url, headers: req.headers, at: Date.now() });
+    if (hang) return;
+    if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    if (redirectTo) { res.writeHead(302, { location: redirectTo }); return res.end(); }
+    const u = new URL(req.url, 'http://x');
+    if (/\/pods$/.test(u.pathname)) { res.writeHead(listStatus, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ kind: 'PodList', items: pods })); }
+    if (!/\/pods\/[^/]+\/log$/.test(u.pathname)) { res.writeHead(404); return res.end('not found'); }
+    if (bigBody) { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end(`${'x'.repeat(2_000_000)}\n`); }
+    res.writeHead(status, { 'content-type': 'text/plain' });
+    res.end(status === 200 ? `${logText(req.url)}\n` : 'error');
+  });
+  const base = await listen(server);
+  return { base, requests, close: () => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }) };
+}
+
+export function k8sEnv(gw, k8s, extra = {}) {
+  return { ...NOENV, PRIV_LOG_GATEWAY_URL: gw.url, PRIV_LOG_AGENT_KEY: KEY, PRIV_LOG_K8S_PROXY_URL: k8s.base, PRIV_LOG_K8S_NAMESPACE: 'privilege', PRIV_LOG_K8S_POD: 'gateway-abc', ...extra };
 }

@@ -36,7 +36,7 @@ export function createRealClient({ origins, secrets = [], lookup = dns.lookup, t
     });
   };
 
-  function request({ url, method = 'GET', headers = {}, body }) {
+  function request({ url, method = 'GET', headers = {}, body, maxBytes: cap = maxBytes }) {
     let u;
     try { u = new URL(url); } catch { return Promise.reject(new RealError('bad_url', 'not a URL', 400)); }
     if (!allowed.has(u.origin)) return Promise.reject(new RealError('origin_not_allowed', `only the configured origins may be contacted (refused ${u.origin})`, 403));
@@ -60,7 +60,7 @@ export function createRealClient({ origins, secrets = [], lookup = dns.lookup, t
         res.on('data', (c) => {
           if (truncated) return;
           size += c.length;
-          if (size > maxBytes) { truncated = true; chunks.push(c.subarray(0, Math.max(0, c.length - (size - maxBytes)))); res.destroy(); finish(resolve, shape(res, chunks, truncated)); return; }
+          if (size > cap) { truncated = true; chunks.push(c.subarray(0, Math.max(0, c.length - (size - cap)))); res.destroy(); finish(resolve, shape(res, chunks, truncated)); return; }
           chunks.push(c);
         });
         res.on('end', () => finish(resolve, shape(res, chunks, truncated)));

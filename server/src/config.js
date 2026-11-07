@@ -1,14 +1,23 @@
 // Settings for Real mode (rule 19). Read from the shared settings file (~/Development/.env, STANDALONE_ENV overrides the path) and
 // from the process environment (the environment wins). Names: PRIV_LOG_GATEWAY_URL, PRIV_LOG_AGENT_KEY (write-only), PRIV_LOG_SEARCH_URL,
-// PRIV_LOG_SEARCH_INDEX. Real needs the gateway URL and the key; the search URL is optional (without it, the user pastes log lines).
+// PRIV_LOG_SEARCH_INDEX, and for the Kubernetes pod-log reader (through `kubectl proxy`): PRIV_LOG_K8S_PROXY_URL, PRIV_LOG_K8S_NAMESPACE,
+// PRIV_LOG_K8S_POD, PRIV_LOG_K8S_CONTAINER. Real needs the gateway URL and the key; the log sources are optional (without any, the user pastes log lines).
 // The key is only ever read here and handed to the Real client; no function in this file returns it to an API.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isLoopbackHost, isPrivateAddress } from './safety.js';
 
-export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX'];
+export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER'];
+export const DEFAULT_K8S_PROXY = 'http://127.0.0.1:8001';
+export const DEFAULT_K8S_CONTAINER = 'log-tailer';
+// A Kubernetes object name (RFC 1123 subdomain) or a label selector such as app=privilege-gateway,tier=gw.
+const K8S_NAME = /^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$/;
+const K8S_SELECTOR = /^[A-Za-z0-9._\/-]{1,63}(=|!=|==)[A-Za-z0-9._-]{1,63}(,[A-Za-z0-9._\/-]{1,63}(=|!=|==)[A-Za-z0-9._-]{1,63}){0,4}$/;
 const MAX_VALUE = 2048;
+// Per-case credentials only the owner has (a revoked key, a federated token): PRIV_LOG_BEARER_<CASEID>, id upper-cased, - as _. Write-only like the key.
+export const BEARER_NAME = /^PRIV_LOG_BEARER_[A-Z0-9_]{1,60}$/;
+export const isSettingName = (n) => SETTING_NAMES.includes(n) || BEARER_NAME.test(n);
 
 export function settingsFile(env = process.env) {
   return env.STANDALONE_ENV || path.join(env.HOME || os.homedir(), 'Development', '.env');
@@ -19,8 +28,8 @@ export function parseSettings(text) {
   const out = {};
   for (const raw of String(text).split('\n')) {
     if (raw.length > 4096) continue; // a settings line is short; skip anything else
-    const m = /^\s*(?:export\s+)?([A-Z0-9_]{1,40})\s*=\s*(.*)$/.exec(raw);
-    if (!m || !SETTING_NAMES.includes(m[1])) continue;
+    const m = /^\s*(?:export\s+)?([A-Z0-9_]{1,80})\s*=\s*(.*)$/.exec(raw);
+    if (!m || !isSettingName(m[1])) continue;
     let v = m[2].trim();
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
     else v = v.replace(/\s+#.*$/, '');
@@ -34,7 +43,8 @@ export function readSettings(env = process.env, { file = true } = {}) {
   let fromFile = {};
   if (file) { try { fromFile = parseSettings(fs.readFileSync(settingsFile(env), 'utf8')); } catch { /* no file */ } }
   const out = {};
-  for (const n of SETTING_NAMES) { const v = env[n] !== undefined && env[n] !== '' ? String(env[n]) : fromFile[n]; if (v !== undefined && v !== '' && v.length <= MAX_VALUE) out[n] = v; }
+  const names = new Set([...SETTING_NAMES, ...Object.keys(env).filter((k) => BEARER_NAME.test(k)), ...Object.keys(fromFile)]);
+  for (const n of names) { const v = env[n] !== undefined && env[n] !== '' ? String(env[n]) : fromFile[n]; if (v !== undefined && v !== '' && v.length <= MAX_VALUE) out[n] = v; }
   return out;
 }
 
@@ -70,8 +80,25 @@ export function realConfig(env = process.env, opts) {
     if (!/^[A-Za-z0-9._*,-]{1,100}$/.test(s.PRIV_LOG_SEARCH_INDEX) || s.PRIV_LOG_SEARCH_INDEX.startsWith('_') || s.PRIV_LOG_SEARCH_INDEX.startsWith('.')) return { ok: false, problem: 'Real is not configured: PRIV_LOG_SEARCH_INDEX may only use letters, digits and . _ * , - (no leading . or _). Mock keeps working.' };
     index = s.PRIV_LOG_SEARCH_INDEX;
   }
-  return { ok: true, gateway: gw, search: search || null, index, key: s.PRIV_LOG_AGENT_KEY };
+  // Kubernetes pod log through `kubectl proxy` (owner-run, loopback by default). Configured when a namespace and a pod (or selector) are set.
+  let k8s = null;
+  if (s.PRIV_LOG_K8S_NAMESPACE || s.PRIV_LOG_K8S_POD || s.PRIV_LOG_K8S_PROXY_URL) {
+    const bad = (m) => ({ ok: false, problem: `Real is not configured: ${m}. Mock keeps working.` });
+    if (!s.PRIV_LOG_K8S_NAMESPACE || !s.PRIV_LOG_K8S_POD) return bad('the Kubernetes log source needs both PRIV_LOG_K8S_NAMESPACE and PRIV_LOG_K8S_POD');
+    const px = checkUrl(s.PRIV_LOG_K8S_PROXY_URL || DEFAULT_K8S_PROXY, { what: 'PRIV_LOG_K8S_PROXY_URL', allowPath: false });
+    if (px.error) return bad(px.error);
+    if (!K8S_NAME.test(s.PRIV_LOG_K8S_NAMESPACE)) return bad('PRIV_LOG_K8S_NAMESPACE is not a Kubernetes name');
+    const selector = s.PRIV_LOG_K8S_POD.includes('=');
+    if (selector ? !K8S_SELECTOR.test(s.PRIV_LOG_K8S_POD) : !K8S_NAME.test(s.PRIV_LOG_K8S_POD)) return bad('PRIV_LOG_K8S_POD must be a pod name or a label selector like app=name');
+    const container = s.PRIV_LOG_K8S_CONTAINER || DEFAULT_K8S_CONTAINER;
+    if (!K8S_NAME.test(container)) return bad('PRIV_LOG_K8S_CONTAINER is not a Kubernetes name');
+    k8s = { url: px.url, origin: px.origin, host: px.host, namespace: s.PRIV_LOG_K8S_NAMESPACE, pod: selector ? null : s.PRIV_LOG_K8S_POD, selector: selector ? s.PRIV_LOG_K8S_POD : null, container };
+  }
+  return { ok: true, gateway: gw, search: search || null, index, k8s, key: s.PRIV_LOG_AGENT_KEY };
 }
+
+// The bearer the owner set for a case in the environment or settings file, or undefined. Never returned by an API.
+export const bearerFromSettings = (caseId, env = process.env, opts) => readSettings(env, opts)[`PRIV_LOG_BEARER_${String(caseId).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`];
 
 export const realAvailableFrom = (env = process.env, opts) => realConfig(env, opts).ok;
 export const realProblemFrom = (env = process.env, opts) => { const c = realConfig(env, opts); return c.ok ? null : c.problem; };
