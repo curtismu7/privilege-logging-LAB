@@ -9,14 +9,17 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createApp, startHttpServer } from '../server/src/app.js';
 import { createHealth } from '../server/src/health.js';
-import { KEY, fakeGateway, fakeSearch } from '../server/test/helpers.js';
+import { KEY, fakeGateway, fakeK8s, fakeSearch, gatewayLog } from '../server/test/helpers.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'e2e-output');
 fs.mkdirSync(OUT, { recursive: true });
+const EVIDENCE = path.join(ROOT, 'docs/evidence');
+const KEEP = new Set(['mock-light-spinner', 'mock-dark-spinner', 'mock-light-json', 'mock-dark-json', 'mock-375-json', 'real-fetching', 'real-trace-json', 'real-unreachable', 'real-timeout', 'mock-dark-realonly']);
 const [which = 'all', baseArg] = process.argv.slice(2);
 const BASE = (baseArg || 'http://127.0.0.1:7801/').replace(/\/?$/, '/');
 const evidence = []; let failed = 0;
+const shot = async (p, name, opts = {}) => { const f = path.join(OUT, `${name}.png`); await p.screenshot({ path: f, ...opts }); if (KEEP.has(name)) { fs.mkdirSync(EVIDENCE, { recursive: true }); fs.copyFileSync(f, path.join(EVIDENCE, `${name}.png`)); } };
 const check = (name, ok, detail = '') => { evidence.push({ name, ok: !!ok, detail }); if (!ok) failed += 1; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `: ${detail}` : ''}`); };
 
 async function launch() {
@@ -45,6 +48,51 @@ const CONTRAST = `(() => {
   return out;
 })()`;
 
+
+// The JSON tree viewer: distinct colours per value type at 4.5:1, collapse/expand, Expand/Collapse all, Raw, Copy, keyboard, badges, inert text.
+const COLORS = `(() => {
+  const parse = (c) => { const m = c.match(/[\\d.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2] }; };
+  const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const bg = parse(getComputedStyle(document.querySelector('.entry')).backgroundColor);
+  const out = {};
+  for (const sel of ['.jt__key', '.jt__str', '.jt__num', '.jt__bool', '.jt__null']) {
+    const el = document.querySelector(\`[data-testid=lines-pasted] \${sel}\`) || document.querySelector(sel);
+    if (!el) { out[sel] = null; continue; }
+    const c = getComputedStyle(el).color; out[sel] = { color: c, ratio: ratio(parse(c), bg) };
+  }
+  for (const f of ['user', 'agent', 'tool', 'decision']) { const el = document.querySelector(\`.fbadge--\${f}\`); if (el) out[f] = { color: getComputedStyle(el).color, ratio: ratio(parse(getComputedStyle(el).color), bg) }; }
+  return out;
+})()`;
+async function jsonProof(p, label, shotPrefix) {
+  // a pasted JSON record carries every value type, so every colour can be measured
+  await p.fill('[data-testid=paste-box]', '{"Event":"mcp_response_blocked","Client":"audit-test","User":"u-1","TopScore":1,"ok":true,"gone":null,"nested":{"list":[1,"two"]},"xss":"<img src=x onerror=alert(1)>"}');
+  await p.click('[data-testid=paste-score]'); await p.waitForSelector('[data-testid=paste-result] [role=tree]');
+  const c = await p.evaluate(COLORS);
+  const types = ['.jt__key', '.jt__str', '.jt__num', '.jt__bool', '.jt__null'];
+  check(`${label}: keys, strings, numbers, booleans and null each get a distinct colour`, types.every((t) => c[t]) && new Set(types.map((t) => c[t].color)).size === 5, types.map((t) => c[t]?.color).join(' '));
+  const weak = types.filter((t) => c[t] && c[t].ratio < 4.5).map((t) => `${t} ${c[t].ratio.toFixed(2)}`);
+  check(`${label}: every JSON value colour is 4.5:1 or more on the entry background`, weak.length === 0, weak.join('; ') || types.map((t) => c[t].ratio.toFixed(1)).join(' '));
+  const badgeWeak = ['user', 'agent', 'tool', 'decision'].filter((f) => c[f] && c[f].ratio < 4.5);
+  check(`${label}: the four field badges are 4.5:1 or more`, badgeWeak.length === 0, badgeWeak.join(','));
+  const tree = p.locator('[data-testid=paste-result] [data-testid=entry-0]');
+  const rows0 = await tree.locator('[role=treeitem]').count();
+  await tree.locator('[data-testid=entry-0-collapse]').click();
+  check(`${label}: Collapse all folds the tree to its root, Expand all opens every node`, (await tree.locator('[role=treeitem]').count()) === 1 && (await tree.locator('[role=treeitem]').first().getAttribute('aria-expanded')) === 'false' && (await (async () => { await tree.locator('[data-testid=entry-0-expand]').click(); return (await tree.locator('[role=treeitem]').count()) > rows0; })()));
+  await tree.locator('[role=treeitem]').first().focus(); await p.keyboard.press('ArrowDown');
+  check(`${label}: arrow keys move through the tree`, (await p.evaluate(() => document.activeElement?.getAttribute('role'))) === 'treeitem' && (await p.evaluate(() => document.activeElement?.getAttribute('aria-level'))) === '2');
+  await tree.locator('[data-testid=entry-0-raw]').click();
+  check(`${label}: Raw shows the original line`, /Event.*mcp_response_blocked/.test(await tree.locator('[data-testid=entry-0-rawtext]').textContent()));
+  await tree.locator('[data-testid=entry-0-raw]').click();
+  check(`${label}: hostile text is inert (no <img> in the page)`, (await p.locator('[data-testid=paste-result] img').count()) === 0 && /<img src=x/.test(await tree.textContent()));
+  await tree.locator('[data-testid=entry-0-copy]').click();
+  await p.waitForFunction(() => /Copied|blocked/.test(document.querySelector('[data-testid=paste-result] [data-testid=entry-0-copied]')?.textContent || ''), null, { timeout: 5000 }).catch(() => {});
+  check(`${label}: Copy gives feedback`, /Copied|blocked/.test(await tree.locator('[data-testid=entry-0-copied]').textContent()));
+  check(`${label}: the field legend and a "not present" list are shown`, (await p.locator('[data-testid=field-legend]').count()) >= 1 && /Not present in this entry|All four/.test(await p.locator('[data-testid=paste-result] [data-testid=not-present]').textContent()));
+  await p.locator('[data-testid=paste-result]').scrollIntoViewIfNeeded();
+  await shot(p, `${shotPrefix}-json`);
+}
+
 async function mockProof(browser) {
   const reqs = new Set();
   for (const theme of ['light', 'dark']) {
@@ -61,23 +109,39 @@ async function mockProof(browser) {
     check(`mock/${theme}: /api/info source=mock realAvailable=false`, info.source === 'mock' && info.realAvailable === false);
     const real409 = await p.evaluate(async () => (await fetch('/api/mode', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"source":"real"}' })).status);
     check(`mock/${theme}: POST /api/mode real answers 409 when not configured`, real409 === 409);
-    await p.screenshot({ path: path.join(OUT, `mock-${theme}-run.png`) });
+    await shot(p, `mock-${theme}-run`);
+    // a single Run shows the two-phase spinner, then opens its Trace by itself
+    await p.click('[data-testid=run-mcp-allowed-key]');
+    await p.waitForSelector('[data-testid=busy-mcp-allowed-key]');
+    const phase1 = await p.getAttribute('[data-testid=busy-mcp-allowed-key]', 'role');
+    await p.waitForFunction(() => /Fetching the log entry/.test(document.querySelector('[data-testid=busy-mcp-allowed-key]')?.textContent || ''));
+    check(`mock/${theme}: spinner is role=status, aria-busy on the case, and reaches "Fetching the log entry"`, phase1 === 'status' && (await p.getAttribute('[data-testid=case-mcp-allowed-key]', 'aria-busy')) === 'true');
+    await shot(p, `mock-${theme}-spinner`);
+    await p.waitForSelector('[data-testid=lines-gateway-log]', { timeout: 15000 });
+    check(`mock/${theme}: the Trace opened by itself and the banner still says replay`, /nothing is sent/.test(await p.textContent('[data-testid=banner]')));
+    await p.click('[data-testid=nav-run]');
     await p.click('[data-testid=run-all]');
-    await p.waitForSelector('[data-testid=open-intent-encoder-unreachable]', { timeout: 15000 });
-    check(`mock/${theme}: Run all replayed 17 cases`, (await p.locator('[data-testid^=open-]').count()) === 17);
+    await p.waitForSelector('[data-testid=open-intent-encoder-unreachable]', { timeout: 60000 });
+    check(`mock/${theme}: Run all replayed 17 cases (the 17 not-yet-measured are not run)`, (await p.locator('[data-testid^=open-]').count()) === 17);
+    const ro = p.locator('[data-testid=run-keys-revoked]');
+    check(`mock/${theme}: a real-only case is listed, disabled, with the tooltip`, (await ro.isDisabled()) && (await ro.getAttribute('title')) === 'No recorded measurement yet. Real mode only.' && /No recorded measurement yet/.test(await p.textContent('[data-testid=mockonly-keys-revoked]')));
+    await p.locator('[data-testid=case-keys-revoked]').scrollIntoViewIfNeeded(); await shot(p, `mock-${theme}-realonly`);
+    const rc = await (await p.request.post(`${BASE}api/run`, { headers: { 'content-type': 'application/json', origin: new URL(BASE).origin }, data: { caseId: 'keys-revoked' } })).status();
+    check(`mock/${theme}: POST /api/run for a real-only case answers 409 in Mock`, rc === 409);
     const runContrast = (await p.evaluate(CONTRAST)).filter((c) => c.ratio < 3);
     check(`mock/${theme}: run page unselected control borders are 3:1 or more`, runContrast.length === 0, runContrast.slice(0, 3).map((w) => `${w.el} ${w.ratio.toFixed(2)}`).join('; '));
     await p.click('[data-testid=open-mcp-allowed-key]'); await p.waitForSelector('[data-testid=lines-gateway-log]');
     const marks = await p.$$eval('[data-testid=lines-gateway-log] mark', (ms) => ms.map((m) => `${m.dataset.field}:${m.textContent}`));
     check(`mock/${theme}: trace marks user, agent, tool and decision inline`, ['user', 'agent', 'tool', 'decision'].every((f) => marks.some((m) => m.startsWith(`${f}:`))), marks.join(' | '));
-    await p.screenshot({ path: path.join(OUT, `mock-${theme}-trace.png`), fullPage: true });
+    await shot(p, `mock-${theme}-trace`, { fullPage: true });
+    await jsonProof(p, `mock/${theme}`, `mock-${theme}`);
     const contrast = await p.evaluate(CONTRAST);
     const weak = contrast.filter((c) => c.ratio < 3);
     check(`mock/${theme}: every unselected control border is 3:1 or more (${contrast.length} checked)`, weak.length === 0, weak.slice(0, 3).map((w) => `${w.el} ${w.ratio.toFixed(2)}`).join('; '));
     await p.click('[data-testid=nav-scorecard]'); await p.waitForSelector('[data-testid=scorecard-table]');
-    check(`mock/${theme}: scorecard has 17 rows`, (await p.locator('[data-testid^=row-]').count()) === 17);
+    check(`mock/${theme}: scorecard has 17 measured rows and 17 "not measured" rows (no fabricated result)`, (await p.locator('[data-testid^=row-]').count()) === 34 && (await p.locator('[data-testid=row-keys-revoked] >> text=not measured').count()) === 4);
     const md = await p.inputValue('[data-testid=md-preview]');
-    check(`mock/${theme}: Markdown export is one row per case`, md.split('\n').filter((l) => l.startsWith('| ')).length === 19);
+    check(`mock/${theme}: Markdown export is one row per case and says not measured`, md.split('\n').filter((l) => l.startsWith('| ')).length === 36 && /Keys \| not measured/.test(md));
     await p.screenshot({ path: path.join(OUT, `mock-${theme}-scorecard.png`), fullPage: true });
     await p.click('[data-testid=nav-sinks]'); await p.waitForSelector('[data-testid=sinks-page]');
     check(`mock/${theme}: five sinks and an UNVERIFIED list`, (await p.locator('[data-testid^=sink-card-]').count()) === 5 && /UNVERIFIED/.test(await p.textContent('[data-testid=cannot-see]')));
@@ -110,6 +174,7 @@ async function mockProof(browser) {
     const w = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     check(`375px ${tab}: no horizontal page scroll`, w.sw <= w.iw, `${w.sw} <= ${w.iw}`);
     if (tab === 'run' || tab === 'scorecard') await p.screenshot({ path: path.join(OUT, `mock-375-${tab}.png`) });
+    if (tab === 'trace') { await p.fill('[data-testid=paste-box]', 'time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-1, client: audit-test"'); await p.click('[data-testid=paste-score]'); await p.waitForSelector('[data-testid=paste-result] [role=tree]'); const w2 = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth })); check('375px trace with a JSON tree: no horizontal page scroll', w2.sw <= w2.iw, `${w2.sw} <= ${w2.iw}`); await p.locator('[data-testid=paste-result]').scrollIntoViewIfNeeded(); await shot(p, 'mock-375-json'); }
   }
   await ctx.close();
   const outside = [...reqs].filter((o) => o !== new URL(BASE).origin);
@@ -118,43 +183,67 @@ async function mockProof(browser) {
 
 async function realProof(browser) {
   const gw = await fakeGateway({ audit: '{"user":"u-live","agent":"audit-test","tool":"get_weather","decision":"allow"}' });
-  // The fake search serves these events whatever the time range asked for (the page runs the case at an unpredictable moment).
-  const stamp = () => new Date().toISOString();
-  const search = await fakeSearch({ ignoreRange: true, events: [
-    { '@timestamp': stamp(), message: 'Access token found for user: u-live, client: audit-test' },
-    { '@timestamp': stamp(), message: 'Principal {User u-live} has policy based capabilities for {Application demo-mcp-app}' },
-    { '@timestamp': stamp(), message: 'MCP call detected for method tools with target: get_weather' },
-  ] });
+  const ctl = { mode: 'ok' };
+  // A FAKE kubectl proxy: pod log lines for what the fake gateway received (slow on purpose, so the spinner can be seen).
+  const k8s = await fakeK8s({ delayMs: 500, logText: () => (ctl.mode === 'ok' ? gatewayLog(gw).join('\n') : '') });
   const health = createHealth({ intervalMs: 3_600_000 }); await health.ready;
-  const env = { STANDALONE_ENV: '/nonexistent', PRIV_LOG_GATEWAY_URL: gw.url, PRIV_LOG_AGENT_KEY: KEY, PRIV_LOG_SEARCH_URL: search.base, PRIV_LOG_SEARCH_INDEX: 'gateway-events' };
-  const app = await startHttpServer({ port: 0, host: '127.0.0.1', app: createApp({ health, env, useSettingsFile: false, sleep: async () => {} }) });
+  const env = { STANDALONE_ENV: '/nonexistent', PRIV_LOG_GATEWAY_URL: gw.url, PRIV_LOG_AGENT_KEY: KEY, PRIV_LOG_K8S_PROXY_URL: k8s.base, PRIV_LOG_K8S_NAMESPACE: 'privilege', PRIV_LOG_K8S_POD: 'gateway-abc' };
+  const app = await startHttpServer({ port: 0, host: '127.0.0.1', app: createApp({ health, env, useSettingsFile: false, retryMs: 400, maxMs: 2500, fallbackMs: 1500, mockDelayMs: 600 }) });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light' });
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(app.url); await p.waitForSelector('[data-testid=run-page]');
   check('real: default mode is Real when configured, banner is live and says owner-run', (await p.getAttribute('[data-testid=mode-real]', 'aria-pressed')) === 'true' && /REAL \(owner-run\)/.test(await p.textContent('[data-testid=banner]')) && (await p.getAttribute('[data-testid=banner]', 'data-state')) === 'live');
-  await p.screenshot({ path: path.join(OUT, 'real-run.png') });
+  await shot(p, 'real-run');
   await p.click('[data-testid=run-mcp-allowed-key]'); await p.waitForSelector('[data-testid=confirm-gate]');
-  check('real: confirm gate names the gateway origin and nothing was sent yet', (await p.textContent('[data-testid=gate-gateway]')) === new URL(gw.url).origin && gw.requests.length === 0);
-  await p.screenshot({ path: path.join(OUT, 'real-confirm-gate.png') });
-  await p.click('[data-testid=gate-confirm]'); await p.waitForSelector('[data-testid=open-mcp-allowed-key]');
-  check('real: after confirming, the MCP exchange ran: initialize, initialized, tools/call, each with traceparent', gw.requests.map((r) => JSON.parse(r.body).method).join(',') === 'initialize,notifications/initialized,tools/call' && gw.requests.every((r) => /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/.test(r.headers.traceparent)));
+  check('real: confirm gate names the gateway and the k8s origin and nothing was sent yet', (await p.textContent('[data-testid=gate-gateway]')) === new URL(gw.url).origin && gw.requests.length === 0 && k8s.requests.length === 0);
+  await p.click('[data-testid=gate-confirm]');
+  await p.waitForFunction(() => /Sending|Fetching the log entry/.test(document.querySelector('[data-testid=busy-mcp-allowed-key]')?.textContent || ''));
+  await p.waitForFunction(() => /Fetching the log entry\.\.\./.test(document.querySelector('[data-testid=busy-mcp-allowed-key]')?.textContent || ''));
+  check('real: the page shows "Fetching the log entry..." with a spinner (role=status, aria-busy)', (await p.getAttribute('[data-testid=busy-mcp-allowed-key]', 'role')) === 'status' && (await p.getAttribute('[data-testid=case-mcp-allowed-key]', 'aria-busy')) === 'true' && (await p.locator('[data-testid=busy-mcp-allowed-key] .spinner').count()) === 1);
+  await shot(p, 'real-fetching');
+  await p.waitForSelector('[data-testid=lines-k8s-pod]', { timeout: 20000 });
+  check('real: after the entry is fetched the Trace opened by itself', await p.isVisible('[data-testid=trace-page]'));
+  check('real: the MCP exchange ran (initialize, initialized, tools/call), each with traceparent, and the marker travelled in the tool argument', gw.requests.map((r) => JSON.parse(r.body).method).join(',') === 'initialize,notifications/initialized,tools/call' && gw.requests.every((r) => /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/.test(r.headers.traceparent)) && /^audit-[0-9a-f]{8}$/.test(JSON.parse(gw.requests[2].body).params.arguments.city));
+  const marker = (await p.textContent('[data-testid=trace-marker]')).trim();
+  check('real: the log entry was found by the run marker, neighbours are labelled inferred', JSON.parse(gw.requests[2].body).params.arguments.city === marker && (await p.locator('[data-testid=entry-method]').allTextContents()).some((t) => t === 'matched by marker') && (await p.locator('[data-testid=entry-method]').allTextContents()).some((t) => /time window: inferred/.test(t)));
+  check('real: the kubectl proxy was asked for the pod log with container, sinceSeconds and timestamps', k8s.requests.some((r) => /\/api\/v1\/namespaces\/privilege\/pods\/gateway-abc\/log\?container=log-tailer&sinceSeconds=\d+&timestamps=true/.test(r.url)));
   check('real: the gateway got the agent key; the page never shows it', gw.requests.every((r) => r.headers.authorization === `Bearer ${KEY}`) && !(await p.content()).includes(KEY));
-  await p.click('[data-testid=open-mcp-allowed-key]'); await p.waitForSelector('[data-testid=lines-search]');
-  const marks = await p.$$eval('[data-testid=lines-search] mark', (ms) => ms.map((m) => `${m.dataset.field}:${m.textContent}`));
-  check('real: log events read back from the search endpoint are marked inline', marks.some((m) => m === 'user:u-live') && marks.some((m) => m === 'tool:get_weather'), marks.join(' | '));
-  check('real: the score comes from the returned lines', (await p.textContent('[data-testid=score]')).split('met').length - 1 >= 3);
+  const marks = await p.$$eval('[data-testid=lines-k8s-pod] mark', (ms) => ms.map((m) => `${m.dataset.field}:${m.textContent}`));
+  check('real: user, agent and tool values are marked in the retrieved tree', ['user:u-live', 'agent:audit-test', 'tool:get_weather'].every((m) => marks.includes(m)), marks.join(' | '));
   check('real: raw hops show the key redacted', /authorization: Bearer \*\*\*/.test(await p.evaluate(() => { document.querySelectorAll('details.hop').forEach((d) => { d.open = true; }); return document.body.textContent; })));
-  await p.screenshot({ path: path.join(OUT, 'real-trace.png'), fullPage: true });
-  await p.click('[data-testid=mode-mock]'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-mock]').getAttribute('aria-pressed') === 'true');
+  await shot(p, 'real-trace-json', { fullPage: true });
+  // the log source goes away: explicit failure with Retry
+  ctl.mode = 'empty'; k8s.requests.length = 0;
+  await p.click('[data-testid=nav-run]'); await p.click('[data-testid=run-mcp-list-filtered]');
+  await p.waitForFunction(() => /No entry found yet after/.test(document.querySelector('[data-testid=busy-mcp-list-filtered]')?.textContent || ''), null, { timeout: 15000 });
+  check('real: while nothing is found the page says so and that it is retrying', /retrying until 3 s/.test(await p.textContent('[data-testid=busy-mcp-list-filtered]')));
+  await p.waitForFunction(() => /No entry found within 3 s/.test(document.querySelector('[data-testid=busy-mcp-list-filtered]')?.textContent || ''), null, { timeout: 15000 });
+  check('real: no entry within the limit is explicit, with Retry and the paste fallback', (await p.locator('[data-testid=retry-mcp-list-filtered]').count()) === 1 && /paste the gateway log lines/.test(await p.textContent('[data-testid=busy-mcp-list-filtered]')));
+  await p.locator('[data-testid=case-mcp-list-filtered]').scrollIntoViewIfNeeded(); await shot(p, 'real-timeout');
   const before = gw.requests.length;
-  await p.click('[data-testid=nav-run]'); await p.click('[data-testid=run-all]'); await p.waitForSelector('[data-testid=open-intent-encoder-unreachable]', { timeout: 15000 });
-  check('real->mock: switching back replays offline (the fake gateway saw no new request)', gw.requests.length === before);
+  ctl.mode = 'ok'; await p.click('[data-testid=retry-mcp-list-filtered]');
+  await p.waitForFunction(() => !document.querySelector('[data-testid=busy-mcp-list-filtered]'), null, { timeout: 15000 });
+  check('real: Retry fetches again without sending the call a second time and the score appears', gw.requests.length === before && (await p.locator('[data-testid=case-mcp-list-filtered] [aria-label=score]').count()) === 1);
+  // log source unreachable
+  await k8s.close();
+  await p.click('[data-testid=run-mcp-allowed-user]');
+  await p.waitForFunction(() => /Log source not reachable/.test(document.querySelector('[data-testid=busy-mcp-allowed-user]')?.textContent || ''), null, { timeout: 20000 });
+  check('real: an unreachable log source is explicit and offers Retry', (await p.getAttribute('[data-testid=busy-mcp-allowed-user]', 'role')) === 'alert' && (await p.locator('[data-testid=retry-mcp-allowed-user]').count()) === 1);
+  await p.locator('[data-testid=case-mcp-allowed-user]').scrollIntoViewIfNeeded(); await shot(p, 'real-unreachable');
+  // real-only cases in Real: write-only credential
+  await p.fill('[data-testid=bearer-input-keys-revoked]', 'owner-bearer-NOT-REAL-5d2e8f10'); await p.click('[data-testid=bearer-set-keys-revoked]'); await p.waitForSelector('[data-testid=bearer-on-keys-revoked]');
+  check('real: the case credential field is write-only (password, cleared, never in the page)', (await p.getAttribute('[data-testid=bearer-input-keys-revoked]', 'type')) === 'password' && (await p.inputValue('[data-testid=bearer-input-keys-revoked]')) === '' && !(await p.content()).includes('owner-bearer-NOT-REAL-5d2e8f10'));
+  await p.click('[data-testid=mode-mock]'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-mock]').getAttribute('aria-pressed') === 'true');
+  const sent = gw.requests.length;
+  await p.click('[data-testid=nav-run]'); await p.click('[data-testid=run-no-credential]');
+  await p.waitForSelector('[data-testid=lines-gateway-log]', { timeout: 15000 });
+  check('real->mock: switching back replays offline (the fake gateway saw no new request)', gw.requests.length === sent);
   await p.click('[data-testid=mode-real]'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-real]').getAttribute('aria-pressed') === 'true');
   check('mock->real: switching again works without a reload', (await p.textContent('[data-testid=banner]')).includes('REAL (owner-run)'));
   check('real: no page errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
-  await new Promise((r) => app.server.close(r)); health.stop(); await gw.close(); await search.close();
+  await new Promise((r) => app.server.close(r)); health.stop(); await gw.close();
 }
 
 const browser = await launch();

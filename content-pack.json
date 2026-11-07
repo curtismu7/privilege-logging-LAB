@@ -74,7 +74,7 @@
     {
       "id": "try-run",
       "label": "Run a use case",
-      "description": "Replay (Mock) or send (Real) any of the 17 use cases, one by one or all.",
+      "description": "Replay (Mock) or send (Real) a use case; the page shows a spinner and fetches the log entry for you. 17 measured cases, plus 17 not yet measured (Real only).",
       "group": "try-it",
       "action": {
         "type": "route",
@@ -88,7 +88,7 @@
     {
       "id": "try-trace",
       "label": "Read the trace",
-      "description": "The request, the response and what each sink logged, with the user, agent, tool and decision marked inline.",
+      "description": "The request, the response and what each sink logged as coloured JSON trees, tagged by how each entry was matched (marker or inferred time window), with the user, agent, tool and decision badged.",
       "group": "try-it",
       "action": {
         "type": "route",
@@ -97,7 +97,7 @@
       "terms": [
         "log-sink"
       ],
-      "story": "S03"
+      "story": "S05"
     },
     {
       "id": "try-scorecard",
@@ -111,7 +111,7 @@
       "terms": [
         "met-partial-missing"
       ],
-      "story": "S04"
+      "story": "S06"
     },
     {
       "id": "concept-sinks",
@@ -126,7 +126,7 @@
         "log-sink",
         "unverified"
       ],
-      "story": "S06"
+      "story": "S08"
     },
     {
       "id": "concept-diagram",
@@ -163,31 +163,41 @@
     },
     {
       "id": "S03",
-      "title": "Read the trace",
-      "say": "The Trace page shows the request, the response and, per log sink, the lines that were written. The user, agent, tool and decision values are marked inline so the customer sees exactly which words satisfy which clause."
+      "title": "Watch it fetch the log",
+      "say": "Pressing Run shows a spinner: first Sending, then Fetching the log entry. The lab finds the entry by a unique marker it put in the request, and falls back to a tight time window, which it labels as inferred. If the log source is down or the entry never shows up, the page says so and offers Retry; with no log source configured you can paste the lines instead."
     },
     {
       "id": "S04",
+      "title": "Cases not measured yet",
+      "say": "Keys, Federated identity, Approvals and Registry lifecycle are listed but have no recording. In Mock they are disabled and the Scorecard says not measured. In Real you supply the credential or do the console action yourself, and the lab shows what the log recorded."
+    },
+    {
+      "id": "S05",
+      "title": "Read the trace",
+      "say": "The Trace page shows the request, the response and, per log sink, the entries that were written as coloured JSON trees, each tagged with how it was matched. The user, agent, tool and decision values are badged and underlined so the customer sees exactly which words satisfy which clause, and fields that are not in the entry are listed."
+    },
+    {
+      "id": "S06",
       "title": "Show the scorecard",
       "say": "Met means a line names it. Partial means it is only implied or only half there, for example an app-level permission line instead of a per-call allow. Missing means nothing in the log says it. Copy the table into the customer email as it is."
     },
     {
-      "id": "S05",
+      "id": "S07",
       "title": "Say the gaps out loud",
       "say": "Rejected calls name nobody. Aggregate routes log almost nothing for the member calls. The LLM route logged nothing we could find. No allowed call has an explicit allow line. Naming these is what makes the rest credible."
     },
     {
-      "id": "S06",
+      "id": "S08",
       "title": "Where it is logged",
       "say": "There are five places a record could land. Only the gateway pod log carried per-call lines, the SIEM index held console changes only, and the shipper to OpenSearch has not delivered since late October. The response header is described but was not captured, so we say UNVERIFIED."
     },
     {
-      "id": "S07",
+      "id": "S09",
       "title": "Real mode and the paste box",
       "say": "Real mode sends the call to the gateway you configured and queries your search endpoint for events in the call window. With no search endpoint, paste the gateway log lines and the same scorer reads them."
     },
     {
-      "id": "S08",
+      "id": "S10",
       "title": "Close honestly",
       "say": "Offer the scorecard as the current measured state, not a promise. Anything marked UNVERIFIED is an open question, and a re-run after a gateway change updates the table."
     }

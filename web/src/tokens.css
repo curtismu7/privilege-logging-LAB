@@ -36,3 +36,14 @@
   --font-size-xl: 24px;
   --font-sans: var(--font-primary);
 }
+
+/* JSON viewer value colours. They map onto the shared stylesheet's semantic tokens (no new literals, no purple), so both themes
+   inherit the contrast the shared file already guarantees on --surface. */
+:root {
+  --json-bg: var(--surface);
+  --json-key: var(--status-info);
+  --json-string: var(--status-ok);
+  --json-number: var(--status-warn);
+  --json-bool: var(--danger-text);
+  --json-null: var(--muted);
+}

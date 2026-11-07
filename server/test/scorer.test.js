@@ -147,3 +147,9 @@ test('parsePaste: bounds, blank lines, and an oversize paste is refused', () => 
   assert.equal(parsePaste(5).problem, 'text must be a string');
   assert.deepEqual(parsePaste('[not json').lines, ['[not json']);
 });
+
+test('pasted lines are redacted before they are scored or shown, and the user, agent and tool values survive', () => {
+  const p = parsePaste('Access token found for user: u-1, client: audit-test Authorization: Bearer abcdefgh12345678\nsecret=hunter2222 and eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1In0.c2ln');
+  assert.ok(!p.lines.join('\n').includes('abcdefgh12345678') && !p.lines.join('\n').includes('hunter2222') && !p.lines.join('\n').includes('eyJhbGci'));
+  assert.equal(scoreLines(p.lines).score.user, 'met'); assert.equal(scoreLines(p.lines).score.agent, 'met');
+});

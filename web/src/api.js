@@ -22,7 +22,10 @@ export async function postJson(url, payload) {
 
 // POST /api/mode: the rule 19 Mock/Real toggle. 409 when Real is not configured.
 export const setMode = (source) => postJson("/api/mode", { source });
-export const runCase = (caseId) => postJson("/api/run", { caseId });
+export const runCase = (caseId, extra = {}) => postJson("/api/run", { caseId, ...extra });
+export const fetchLog = (caseId, restart = false) => postJson("/api/fetch-log", restart ? { caseId, restart: true } : { caseId });
+// A write-only credential for one case: the answer says whether one is set, never what it is.
+export const setBearer = (caseId, bearer) => postJson("/api/bearer", { caseId, bearer });
 export const confirmGateway = (gateway) => postJson("/api/confirm", { gateway });
 export const scorePaste = (text, caseId) => postJson("/api/score", caseId ? { text, caseId } : { text });
 export const resetWorkspace = () => workspaceFetch("/api/reset", { method: "POST", body: "{}" }).then((r) => r.ok);

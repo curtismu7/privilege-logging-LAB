@@ -2,6 +2,7 @@
 // Accepts: plain log lines (logrus text, JSON records one per line), a JSON array of strings or records, and an
 // Elasticsearch/OpenSearch _search response (hits.hits[]._source). Everything is bounded and nothing is evaluated.
 import { MAX_LINE, MAX_LINES } from './scorer.js';
+import { redactLine } from './redact.js';
 
 export const MAX_PASTE_BYTES = 200_000;
 
@@ -32,6 +33,7 @@ export function parsePaste(text) {
 }
 
 function finish(all) {
-  const lines = all.slice(0, MAX_LINES);
+  // Pasted and returned lines are redacted (tokens, JWTs, keys, passwords) before anything scores or shows them.
+  const lines = all.slice(0, MAX_LINES).map(redactLine);
   return { lines, truncated: all.length > MAX_LINES };
 }

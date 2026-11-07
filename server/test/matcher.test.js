@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_SHOWN, MAX_SOURCE_LINES, TIGHT_MS, WINDOW_AFTER_MS, WINDOW_BEFORE_MS, appsIn, matchEntry, parseTs } from '../src/matcher.js';
+
+// The window is a product decision, pinned with literal numbers (not the constants), so widening it fails a test: send time - 1 s to receipt + 3 s, tight span 1.5 s.
+test('the window constants are pinned: 1 s before the send, 3 s after the receipt, 1.5 s around a marker line', () => {
+  assert.equal(WINDOW_BEFORE_MS, 1000); assert.equal(WINDOW_AFTER_MS, 3000); assert.equal(TIGHT_MS, 1500);
+});
 import { redactLine } from '../src/redact.js';
 import { linesFromText } from '../src/logSources.js';
 
@@ -13,22 +18,27 @@ test('marker first: the line with the marker is "marker"; neighbours within the 
     L('Access token found for user: u1, client: k', T0 + 100),
     L('MCP call detected for method tools with target: get_weather', T0 + 110),
     L('payload {"city":"audit-ab12cd34"}', T0 + 120),
-    L('someone else entirely', T0 + 120 + TIGHT_MS + 1),
+    L('someone else entirely', T0 + 120 + 1501),
     L('unrelated earlier line', T0 - 5000),
   ]);
   assert.equal(r.state, 'marker');
   assert.deepEqual(r.lines.map((x) => x.method), ['window', 'window', 'marker']);
   assert.equal(r.markerLines, 1); assert.equal(r.windowLines, 2);
   assert.ok(!r.lines.some((x) => /someone else|earlier/.test(x.text)), 'lines that do not belong to the call are not shown');
+  // a neighbour exactly at the tight edge is in, one millisecond past it is out; and a line far outside the call window is out even next to the marker
+  const edge = run([L('payload audit-ab12cd34', T0 + 100), L('at tight edge', T0 + 100 + 1500), L('past tight edge', T0 + 100 - 1501), L('outside call window but near', T1 + 3001)]);
+  assert.deepEqual(edge.lines.map((x) => x.text), ['payload audit-ab12cd34', 'at tight edge']);
+  const far = run([L('payload audit-ab12cd34', T1 + 2900), L('near marker, past the call window', T1 + 3500)]);
+  assert.deepEqual(far.lines.map((x) => x.text), ['payload audit-ab12cd34']);
 });
 
 test('marker not logged: falls back to the call window, every line "window" (inferred), edges inclusive', () => {
   const r = run([
-    L('before the window', T0 - WINDOW_BEFORE_MS - 1),
-    L('at the start edge', T0 - WINDOW_BEFORE_MS),
+    L('before the window', T0 - 1001),
+    L('at the start edge', T0 - 1000),
     L('inside', T0 + 50),
-    L('at the end edge', T1 + WINDOW_AFTER_MS),
-    L('after the window', T1 + WINDOW_AFTER_MS + 1),
+    L('at the end edge', T1 + 3000),
+    L('after the window', T1 + 3001),
   ]);
   assert.equal(r.state, 'window');
   assert.deepEqual(r.lines.map((x) => x.text), ['at the start edge', 'inside', 'at the end edge']);

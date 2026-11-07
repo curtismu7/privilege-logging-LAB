@@ -4,7 +4,8 @@ import { createApp, startHttpServer } from "../../server/src/app.js";
 import { createHealth } from "../../server/src/health.js";
 
 const env = JSON.parse(process.env.LAB_ENV || "{}");
+const opts = JSON.parse(process.env.LAB_OPTS || "{}");
 const health = createHealth({ intervalMs: 3_600_000 });
 await health.ready;
-const { url } = await startHttpServer({ port: 0, host: "127.0.0.1", app: createApp({ health, env, useSettingsFile: false, sleep: async () => {} }) });
+const { url } = await startHttpServer({ port: 0, host: "127.0.0.1", app: createApp({ health, env, useSettingsFile: false, ...opts }) });
 console.log(`URL ${url}`);
