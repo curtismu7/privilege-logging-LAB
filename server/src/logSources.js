@@ -61,7 +61,7 @@ export async function readK8s({ client, k8s, fromMs, now, trace }) {
     const url = `${base}/api/v1/namespaces/${enc(k8s.namespace)}/pods/${enc(pod)}/log?container=${enc(k8s.container)}&sinceSeconds=${sinceSeconds}&timestamps=true&tailLines=${K8S_TAIL_LINES}`;
     const span = trace.span();
     try {
-      const res = await client.request({ url, method: 'GET', headers: { accept: 'text/plain', traceparent: formatTraceparent(trace.traceId, span) }, maxBytes: K8S_MAX_BYTES });
+      const res = await client.request({ url, method: 'GET', headers: { accept: '*/*', traceparent: formatTraceparent(trace.traceId, span) }, maxBytes: K8S_MAX_BYTES });
       const hop = hopOf(`read the pod log (${pod})`, trace, span, url, 'GET', res);
       hops.push(hop);
       if (res.redirect) throw fail('redirect_refused', 'kubectl proxy answered a redirect; redirects are never followed', hop);
