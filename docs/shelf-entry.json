@@ -4,7 +4,7 @@
       "id": "privilege-logging-lab",
       "name": "Privilege Logging Lab",
       "kind": "Tester",
-      "description": "Drive each Privilege gateway use case and see what gets logged, scored against the customer's audit-trail requirement: user, agent, tool and policy decision. Mock replays 17 transactions measured on 2026-11-07; Real (owner-run) sends them to your own gateway and reads the log back. The gaps are listed, not hidden.",
+      "description": "Drive each Privilege gateway use case and see what gets logged, scored on user, agent, tool and policy decision. Mock replays 17 transactions measured on 2026-11-07; Real (owner-run) sends them to your gateway and reads the log back. The gaps are listed, not hidden.",
       "url": "http://localhost:7801",
       "healthPath": "/api/health",
       "composeFile": "privilege-logging-LAB/docker-compose.yml",
