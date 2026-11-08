@@ -102,6 +102,7 @@ export function fieldsOf(src) {
     user: str(d.User) || str(consoleUser), agent: agentKey || client, agentFrom: agentKey ? 'agent key' : client ? 'client' : null,
     principalKind: str(d.PrincipalKind, 40), tool: str(d.Target), decision: str(d.Decision, 40), app: str(d.App), event: str(d.Event, 120),
     reason: str(d.Reason, 400), requestId: str(d.RequestID, 128), traceId: str(d.TraceID, 128) || traceOf(headers.Traceparent), message: str(s.Message, 200),
+    method: str(d.Method, 40), path: str(d.Path), policyIds: Array.isArray(d.PolicyIDs) ? str(d.PolicyIDs.filter((x) => typeof x === 'string').slice(0, 10).join(', ')) : str(d.PolicyIDs),
   };
 }
 
@@ -119,12 +120,12 @@ export const entriesOf = (hits) => hits.map(entryOf).sort(newestFirst);
 
 // Pages through the console for one range: Size `pageSize`, From offset, until the records run out, `cap` records are read or the
 // search window (From + Size) is reached. Says plainly which limit cut it off.
-export async function readWindow({ client, decisions, fromMs, toMs, trace, pageSize = CONSOLE_PAGE, cap = RECORD_CAP, window = SEARCH_WINDOW }) {
+export async function readWindow({ client, decisions, indices, fromMs, toMs, trace, pageSize = CONSOLE_PAGE, cap = RECORD_CAP, window = SEARCH_WINDOW }) {
   const hits = []; let total = null; let from = 0; let requests = 0; let stop = 'end';
   for (;;) {
     const size = Math.min(pageSize, cap - hits.length, window - from);
     if (size <= 0) { stop = hits.length >= cap ? 'cap' : 'window'; break; }
-    const r = await elasticlogSearch({ client, decisions, fromMs, toMs, trace, size, from });
+    const r = await elasticlogSearch({ client, decisions, ...(indices ? { indices } : {}), fromMs, toMs, trace, size, from });
     requests += 1;
     if (total === null && r.total !== null) total = r.total;
     hits.push(...r.hits.slice(0, size));

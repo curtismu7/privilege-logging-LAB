@@ -15,11 +15,12 @@ import { setAllowedHosts } from './netguard.js';
 import { EXTRA_SINKS, REAL_ONLY_NOTE, attachPasted, caseSummary, fetchAttempt, mockFetch, mockSend, realSend, scorePasted, scorecardRows, toMarkdown } from './lab.js';
 import { sourcesFrom } from './logSources.js';
 import { KIBANA_DATA_VIEW, KIBANA_HINT, RECORD_CAP, VIEW_PAGE, applyFilters, entriesOf, facetsOf, histogramOf, kibanaUrl, kqlOf, limitNote, parseExplorerQuery, parseRelatedQuery, readWindow, relatedOf, summaryOf } from './privilegeExplorer.js';
+import { REQ9_INDICES, RID, WINDOW_DAYS, buildReq9 } from './req9.js';
 import { newTrace } from './trace.js';
 import { SINK_CHANNEL } from './eventKind.js';
 import { parsePaste } from './logparse.js';
 import { buildStory } from './story.js';
-import { DIAGRAM_NAMES, buildDiagram } from './diagramData.js';
+import { DIAGRAM_NAMES, EXTRA_DIAGRAMS, buildDiagram } from './diagramData.js';
 import { mountShelfRoute } from './shelfLink.js';
 import { createWorkspaces, workspaceFrom } from './workspaces.js';
 
@@ -135,7 +136,7 @@ export function createApp({
     }));
     res.json({ requirement: capture.requirement, sinks: capture.sinks, extraSinks: EXTRA_SINKS, channels: SINK_CHANNEL, usage, capturedOn: capture.capturedOn });
   });
-  api.get('/diagram', (req, res) => { noStore(res); res.json({ names: DIAGRAM_NAMES, ...buildDiagram(DIAGRAM_NAMES.includes(req.query.name) ? req.query.name : undefined) }); });
+  api.get('/diagram', (req, res) => { noStore(res); res.json({ names: DIAGRAM_NAMES, ...buildDiagram([...DIAGRAM_NAMES, ...EXTRA_DIAGRAMS].includes(req.query.name) ? req.query.name : undefined) }); });
 
   api.get('/runs', withWorkspace((ws, _req, res) => res.json({ source: mode, runs: workspaces.listRuns(ws, mode) })));
 
@@ -222,18 +223,18 @@ export function createApp({
   const kibana = () => kibanaConfig(env, settingsOpts);
   // Real reads go through the confirm gate; the parsed (redacted) records of the last range are kept for a minute per tab, so paging
   // and changing filters do not read the console again.
-  const privilegeRead = async (ws, res, fromMs, toMs) => {
+  const privilegeRead = async (ws, res, fromMs, toMs, { slot = 'privCache', indices } = {}) => {
     const conf = cfg();
     if (!conf.ok) { res.status(409).json({ error: 'real_not_configured', detail: conf.problem }); return null; }
     if (!conf.decisions) { res.status(409).json({ error: 'console_not_configured', detail: 'Set PRIV_LOG_CONSOLE_URL and PRIV_LOG_CONSOLE_TENANT (and PRIV_LOG_CONSOLE_CA for the local console) to read Privilege\'s logs.' }); return null; }
     const st = workspaces.state(ws);
     if (st.confirmed !== signature(conf)) { res.status(412).json({ error: 'confirm_required', detail: 'Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null, decisionsOrigin: conf.decisions.origin }); return null; }
-    const key = `${signature(conf)}|${fromMs}|${toMs}`;
-    if (st.privCache?.key === key && now() - st.privCache.at < 60_000) return st.privCache.value;
+    const key = slot === 'privCache' ? `${signature(conf)}|${fromMs}|${toMs}` : signature(conf);
+    if (st[slot]?.key === key && now() - st[slot].at < 60_000) return st[slot].value;
     try {
-      const r = await readWindow({ client: clientFor(conf), decisions: conf.decisions, fromMs, toMs, trace: newTrace(), cap: privilegeCap });
+      const r = await readWindow({ client: clientFor(conf), decisions: conf.decisions, ...(indices ? { indices } : {}), fromMs, toMs, trace: newTrace(), cap: privilegeCap });
       const value = { entries: entriesOf(r.hits), origin: conf.decisions.origin, limit: limitNote({ stop: r.stop, read: r.hits.length, total: r.total, cap: privilegeCap }), total: r.total, requests: r.requests };
-      st.privCache = { key, at: now(), value };
+      st[slot] = { key, at: now(), value };
       return value;
     } catch (e) {
       res.status(502).json({ error: e.code || 'source_unreachable', detail: e.detail || e.message });
@@ -271,6 +272,29 @@ export function createApp({
     if (mode === 'mock') base = { entries: mockEntries.filter((e) => { const t = Date.parse(e.at); return t >= q.from && t <= q.to; }), limit: null };
     else { base = await privilegeRead(ws, res, q.from, q.to); if (!base) return undefined; }
     return res.json({ source: mode, from: new Date(q.from).toISOString(), to: new Date(q.to).toISOString(), requestId: q.requestId, traceId: q.traceId, limit: base.limit, entries: relatedOf(base.entries, q) });
+  }));
+
+  // Requirement 9 (the audit map): the decision records and HTTP records of the last 90 days, mapped onto parts a-d. ?rid=<RequestID>
+  // picks the record the relationship view shows (deep link #req9/<RequestID>); an unknown id falls back to the newest with a note.
+  // Real reads through the same confirm gate, cap and redaction as the Privilege tab, kept a minute per tab. Mock: the recorded sample.
+  const req9Sample = JSON.parse(fs.readFileSync(new URL('../data/req9-sample.json', import.meta.url), 'utf8'));
+  const req9Mock = entriesOf(req9Sample.hits);
+  api.get('/req9', withWorkspace(async (ws, req, res) => {
+    for (const [k, v] of Object.entries(req.query)) {
+      if (k !== 'rid') return res.status(400).json({ error: 'bad_param', detail: 'allowed parameter: rid' });
+      if (typeof v !== 'string' || !RID.test(v)) return res.status(400).json({ error: 'bad_rid', detail: 'rid must be 1 to 64 letters, digits, _ or -' });
+    }
+    const clock = mode === 'mock' ? Date.parse(req9Sample.clock) : now();
+    const from = clock - WINDOW_DAYS * 86_400_000;
+    let base;
+    if (mode === 'mock') base = { entries: req9Mock, limit: null, origin: null };
+    else { base = await privilegeRead(ws, res, from, clock, { slot: 'req9Cache', indices: REQ9_INDICES }); if (!base) return undefined; }
+    return res.json({
+      source: mode, channel: req9Sample.channel, origin: base.origin, from: new Date(from).toISOString(), to: new Date(clock).toISOString(),
+      ...(mode === 'mock' ? { label: req9Sample.label, note: req9Sample.note, recordedOn: req9Sample.recordedOn } : {}),
+      read: base.entries.length, limit: base.limit, deepLink: '#req9/<RequestID>',
+      ...buildReq9(base.entries, { rid: req.query.rid || null }),
+    });
   }));
 
   // Pure scoring of pasted lines (works in both modes). With a caseId in Real mode and an existing run, the lines are attached to that run.

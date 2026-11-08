@@ -35,7 +35,7 @@ describe("Mock mode", () => {
     const real = screen.getByTestId("mode-real");
     expect(real).toBeDisabled();
     expect(real.getAttribute("title")).toMatch(/PRIV_LOG_GATEWAY_URL/);
-    for (const tab of ["trace", "privilege", "scorecard", "sinks", "diagram", "talk", "run"]) {
+    for (const tab of ["trace", "privilege", "req9", "scorecard", "sinks", "diagram", "talk", "run"]) {
       await user.click(screen.getByTestId(`nav-${tab}`));
       expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
     }

@@ -88,7 +88,7 @@ export const TALK_TRACK = [
   { id: 'close', title: 'Close honestly', say: 'Offer the scorecard as the current measured state, not a promise. Anything marked UNVERIFIED is an open question, and a re-run after a gateway change updates the table.' },
 ];
 
-export const PAGE_SAYS = { run: ['say-first', 'run', 'retrieval', 'realonly'], trace: ['trace', 'retrieval'], scorecard: ['scorecard', 'gaps'], sinks: ['sinks'], privilege: ['sinks'], diagram: ['say-first'], talk: [] };
+export const PAGE_SAYS = { run: ['say-first', 'run', 'retrieval', 'realonly'], trace: ['trace', 'retrieval'], scorecard: ['scorecard', 'gaps'], sinks: ['sinks'], privilege: ['sinks'], req9: ['gaps'], diagram: ['say-first'], talk: [] };
 
 export function buildStory(capture) {
   return { title: 'Privilege Logging Lab', intro: INTRO, banner: bannerMock(capture.capturedOn), realBanner: bannerReal, requirement: capture.requirement, facts: buildFacts(capture), talkTrack: TALK_TRACK, pageSays: PAGE_SAYS, capturedOn: capture.capturedOn };

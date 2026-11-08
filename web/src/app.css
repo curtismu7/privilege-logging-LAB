@@ -142,8 +142,8 @@ button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:h
 .mono { font-family: var(--font-mono); font-size: 0.85em; overflow-wrap: anywhere; }
 
 .channel { margin: 0.25rem 0 0.4rem; padding: 0.3rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.02em; border: 1px solid var(--border); }
-.channel--privilege-es { background: var(--ok-bg, rgba(46, 160, 67, 0.15)); border-color: var(--ok, #2ea043); }
-.channel--pod { background: var(--warn-bg, rgba(210, 153, 34, 0.15)); border-color: var(--warn, #d29922); }
+.channel--privilege-es { background: color-mix(in srgb, var(--status-ok) 15%, transparent); border-color: var(--status-ok); }
+.channel--pod { background: color-mix(in srgb, var(--status-warn) 15%, transparent); border-color: var(--status-warn); }
 /* A disabled primary must look disabled (the shared sheet only fades it to 0.88, which reads as enabled): flat surface, muted text,
    dashed edge. Muted on --surface-2 stays above 4.5:1 in both themes. Override here; standalone-ui.css is vendored. */
 button.primary:disabled { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--muted); opacity: 1; }
@@ -182,3 +182,37 @@ button.primary:disabled { background: var(--surface-2); color: var(--muted); bor
 button.linkish { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; color: var(--status-info); font: inherit; cursor: pointer; text-align: left; }
 .priv-filters .seg { flex-wrap: wrap; }
 .priv-table td, .priv-table td.mono { white-space: nowrap; overflow-wrap: normal; }
+
+/* Requirement 9 tab: requirement quote, record picker, coverage counts and the a-d ledger (stacks at narrow widths). */
+.req9-quote { margin: 0.5rem 0; padding: 0.5rem 0.9rem; border-left: 4px solid var(--accent); background: var(--surface-2); color: var(--text); max-width: 78ch; font-size: 0.9rem; }
+.req9-quote ol { margin: 0.35rem 0 0; }
+.req9-list { list-style: none; margin: 0.25rem 0 0.75rem; padding: 0; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.req9-list li + li { border-top: 1px solid var(--border); }
+.req9-list button { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; align-items: center; width: 100%; text-align: left; border: 0; border-radius: 0; background: var(--surface); color: var(--text); padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+.req9-list button[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 4px 0 0 var(--accent); font-weight: 700; }
+.req9-list button:focus-visible { outline: 2px solid var(--status-info); outline-offset: -2px; }
+.req9-linked { margin: 0.25rem 0 0.75rem; padding-left: 1.1rem; font-size: 0.85rem; }
+.req9-linked li { margin: 0.2rem 0; overflow-wrap: anywhere; }
+.card p.req9-count { font-size: 1.6rem; font-weight: 800; margin: 0.2rem 0; }
+.req9-ledger { display: grid; gap: 0.6rem; margin: 0.5rem 0; }
+.req9-row { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(4, minmax(0, 1fr)); gap: 0.5rem; padding: 0.6rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); min-width: 0; }
+.req9-row--head { background: transparent; border: 0; padding: 0 0.6rem; font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+.req9-row--head span { display: block; text-transform: none; font-weight: 400; font-family: var(--font-mono); }
+.req9-meta { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; min-width: 0; overflow-wrap: anywhere; }
+.req9-meta button { align-self: flex-start; font-size: 0.8rem; }
+.req9-node { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); min-width: 0; overflow-wrap: anywhere; }
+.req9-node__k { display: none; font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+.req9-node__v { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 700; color: var(--text); }
+.req9-node__s { font-size: 0.75rem; color: var(--muted); }
+.req9-node--danger { border-color: var(--danger-text); }
+.req9-node--warn { border-color: var(--status-warn); }
+.req9-node--ok { border-color: var(--status-ok); }
+.req9-node--missing { border: 2px dashed var(--danger-text); background: transparent; }
+.req9-node--missing .req9-node__v { color: var(--danger-text); }
+.req9-follow { grid-column: 1 / -1; font-size: 0.8rem; color: var(--text-body); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .req9-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .req9-row--head { display: none; }
+  .req9-meta { grid-column: 1 / -1; }
+  .req9-node__k { display: block; }
+}

@@ -29,3 +29,7 @@
 .pat-edge--none path { stroke-dasharray: 6 5; }
 /* A box selected for keyboard moving (Enter on a focused box) shows it; the arrow keys then move it. */
 .pat-canvas .react-flow__node.selected .pat-node, .pat-canvas .react-flow__node:focus-visible .pat-node { outline: 3px solid var(--th-status-info); outline-offset: 2px; }
+.pat-node__sub { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: var(--th-text-muted); overflow-wrap: anywhere; }
+.pat-node__sub:first-of-type { color: var(--th-text); font-family: var(--font-mono); }
+/* Requirement 9: a part the selected record does not carry. */
+.pat-node--missing { border-style: dashed; border-color: var(--th-deny); background: var(--th-deny-bg); }

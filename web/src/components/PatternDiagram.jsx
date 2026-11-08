@@ -22,6 +22,7 @@ function Box({ data }) {
         </span>
       ))}
       {data.label}
+      {data.sub?.map((s, i) => <span key={i} className="pat-node__sub">{s}</span>)}
     </div>
   );
 }
@@ -75,7 +76,7 @@ function Canvas({ pattern, positions, onMove, stepper }) {
   const nodes = pattern.nodes.map((n) => ({
     id: n.id, type: "box", position: positions[n.id], draggable: true, selected: selected === n.id,
     ariaLabel: `${n.label}: box. Press Enter to select, then the arrow keys to move it.`,
-    data: { label: n.label, kind: n.kind, on: !!active && (active.from === n.id || active.to === n.id) },
+    data: { label: n.label, sub: n.sub, kind: n.kind, on: !!active && (active.from === n.id || active.to === n.id) },
   }));
   const offs = labelOffsets(pattern.steps);
   const edges = pattern.steps.map((s, i) => {
@@ -104,7 +105,9 @@ function Canvas({ pattern, positions, onMove, stepper }) {
   );
 }
 
-export default function PatternDiagram({ pattern, resetSignal = 0 }) {
+export const DASHED_NOTE = "Dashed arrows: the sink held nothing, or was not read back.";
+
+export default function PatternDiagram({ pattern, resetSignal = 0, dashedNote = DASHED_NOTE }) {
   const initial = useMemo(() => Object.fromEntries(pattern.nodes.map((n) => [n.id, { x: n.x, y: n.y }])), [pattern]);
   const [positions, setPositions] = useState(initial);
   const stepper = useDiagramStepper(pattern.steps.length);
@@ -133,7 +136,7 @@ export default function PatternDiagram({ pattern, resetSignal = 0 }) {
         <summary>The steps as text</summary>
         <ol>{pattern.steps.map((s, i) => <li key={i}>{s.label}</li>)}</ol>
       </details>
-      <p className="keys">Drag any box, or focus it with Tab, press Enter and move it with the arrow keys. Dashed arrows: the sink held nothing, or was not read back. Moved: {Object.keys(positions).filter((k) => positions[k].x !== initial[k].x || positions[k].y !== initial[k].y).length} box(es).</p>
+      <p className="keys">Drag any box, or focus it with Tab, press Enter and move it with the arrow keys. {dashedNote} Moved: {Object.keys(positions).filter((k) => positions[k].x !== initial[k].x || positions[k].y !== initial[k].y).length} box(es).</p>
     </section>
   );
 }

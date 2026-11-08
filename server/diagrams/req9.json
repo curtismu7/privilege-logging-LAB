@@ -1,0 +1,132 @@
+{
+  "schema": "diagram-studio/1",
+  "id": "privilege-logging-req9",
+  "title": "The relationship one decision record carries",
+  "lede": "One policy-decision-log record holds all four parts of requirement 9. Data.RequestID ties the decision to the approval hold that follows it. Pick a record to fill the boxes with its values.",
+  "groups": {
+    "caller": {
+      "label": "Who (a, b)",
+      "color": "grey"
+    },
+    "backend": {
+      "label": "What (c)",
+      "color": "blue"
+    },
+    "gateway": {
+      "label": "Decision (d)",
+      "color": "red"
+    },
+    "sink": {
+      "label": "Linked record",
+      "color": "dark"
+    }
+  },
+  "nodes": [
+    {
+      "id": "user",
+      "label": "a · User",
+      "group": "caller",
+      "x": 0,
+      "y": 60,
+      "sub": [
+        "Data.User",
+        "Data.PrincipalKind"
+      ]
+    },
+    {
+      "id": "agent",
+      "label": "b · Agent",
+      "group": "caller",
+      "x": 250,
+      "y": 60,
+      "sub": [
+        "Data.AgentKey"
+      ]
+    },
+    {
+      "id": "tool",
+      "label": "c · Tool",
+      "group": "backend",
+      "x": 500,
+      "y": 60,
+      "sub": [
+        "Data.Target · Data.Method",
+        "on Data.App"
+      ]
+    },
+    {
+      "id": "decision",
+      "label": "d · Decision",
+      "group": "gateway",
+      "x": 750,
+      "y": 60,
+      "sub": [
+        "Data.Decision · Data.Reason",
+        "Data.PolicyIDs"
+      ]
+    },
+    {
+      "id": "approval",
+      "label": "policy_approval_required",
+      "group": "sink",
+      "x": 750,
+      "y": 300,
+      "sub": [
+        "same Data.RequestID"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "user",
+      "target": "agent",
+      "label": "on behalf of"
+    },
+    {
+      "source": "agent",
+      "target": "tool",
+      "label": "calls"
+    },
+    {
+      "source": "tool",
+      "target": "decision",
+      "label": "judged by"
+    },
+    {
+      "source": "decision",
+      "target": "approval",
+      "label": "Data.RequestID joins them",
+      "dashed": true
+    }
+  ],
+  "steps": [
+    {
+      "title": "a · the user",
+      "what": "Data.User names the user the call was made for; Data.PrincipalKind says whether it is a person (User) or a workload (NonHumanIdentity).",
+      "edges": [
+        0
+      ]
+    },
+    {
+      "title": "b · the agent",
+      "what": "Data.AgentKey names the agent access key the call came in with. A call that carried the user's own token has no agent key, so nothing names the agent.",
+      "edges": [
+        1
+      ]
+    },
+    {
+      "title": "c · the tool",
+      "what": "Data.Target is the tool, Data.Method the MCP method (tools/call) and Data.App the MCP app it was called on.",
+      "edges": [
+        2
+      ]
+    },
+    {
+      "title": "d · the decision",
+      "what": "Data.Decision (deny, hitl, allow), Data.Reason and Data.PolicyIDs: what the policy said and which policy said it. The approval hold that follows carries the same Data.RequestID (dashed: a separate record).",
+      "edges": [
+        3
+      ]
+    }
+  ]
+}
