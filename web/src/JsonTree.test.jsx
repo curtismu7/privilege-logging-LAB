@@ -8,7 +8,7 @@ import { parseLogLine } from "./lib/logEntry";
 import { redactText } from "./lib/clipboard";
 
 afterEach(cleanup);
-const entry = { time: "2026-11-07T10:00:00Z", level: "info", n: 42, ok: true, gone: null, nested: { a: [1, "two"] }, msg: "Access token found for user: u-1, client: audit-test" };
+const entry = { time: "2026-11-07T10:00:00Z", level: "info", n: 42, ok: true, gone: null, nested: { a: [1, "two"] }, msg: "Access token found for user: u-1, client: lab-agent-key" };
 
 describe("logEntry parsing", () => {
   it("logrus text becomes time, level, msg, file first, then the rest, with typed unquoted values", () => {
@@ -157,16 +157,16 @@ describe("JsonTree component", () => {
   });
 
   it("the four requirement fields are marked in the tree with a badge and underline, and the legend names them", () => {
-    render(<><FieldLegend /><JsonTree value={entry} raw="" marks={[{ field: "user", level: "met", text: "u-1", why: "w" }, { field: "agent", level: "met", text: "audit-test", why: "w" }]} /></>);
+    render(<><FieldLegend /><JsonTree value={entry} raw="" marks={[{ field: "user", level: "met", text: "u-1", why: "w" }, { field: "agent", level: "met", text: "lab-agent-key", why: "w" }]} /></>);
     expect(screen.getByTestId("badge-user")).toBeInTheDocument(); expect(screen.getByTestId("badge-agent")).toBeInTheDocument();
     expect(screen.queryByTestId("badge-tool")).toBeNull();
-    expect([...document.querySelectorAll("mark")].map((m) => `${m.dataset.field}:${m.textContent}`).sort()).toEqual(["agent:audit-test", "user:u-1"]);
+    expect([...document.querySelectorAll("mark")].map((m) => `${m.dataset.field}:${m.textContent}`).sort()).toEqual(["agent:lab-agent-key", "user:u-1"]);
     expect(screen.getByTestId("field-legend").querySelectorAll(".fbadge")).toHaveLength(4);
   });
 });
 
 describe("LogEntries", () => {
-  const lines = ['time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-1, client: audit-test"', '{"Event":"mcp_response_blocked","User":"u-1","Client":"audit-test"}', "plain unparseable words"];
+  const lines = ['time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-1, client: lab-agent-key"', '{"Event":"mcp_response_blocked","User":"u-1","Client":"lab-agent-key"}', "plain unparseable words"];
   const marks = { 0: [{ field: "user", level: "met", start: 78, end: 81, why: "x" }, { field: "agent", level: "met", start: 91, end: 101, why: "y" }], 1: [{ field: "decision", level: "met", start: 10, end: 31, why: "z" }] };
   it("every line becomes a tree (logrus, JSON, text), is tagged with how it matched, and the missing fields are listed", () => {
     render(<LogEntries lines={lines} methods={["marker", "window", "window"]} marks={marks} />);

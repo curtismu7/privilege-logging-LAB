@@ -22,10 +22,10 @@ describe("entry tags", () => {
 
   it("identities: key, subject, user, app and decoded Privilege RefIDs (last segment only)", () => {
     expect(identitiesOf('workload token accepted for key lab-fed issuer=https://x.invalid subject=lab-sub"')).toEqual(["key lab-fed", "subject lab-sub"]);
-    expect(identitiesOf("Access token found for user: u-1, client: audit-test")).toEqual(["user u-1", "key audit-test"]);
+    expect(identitiesOf("Access token found for user: u-1, client: lab-agent-key")).toEqual(["user u-1", "key lab-agent-key"]);
     expect(identitiesOf(`Success: principal {RefKind:NonHumanIdentity RefID:${ref("privilege-logging-lab")}} has permission for {RefKind:Application RefID:${ref("hostile-mcp")}}`))
       .toEqual(["identity privilege-logging-lab", "app hostile-mcp"]);
-    expect(identitiesOf('{"AgentKey":"audit-test","Target":"demo-mcp-app"}')).toEqual(["key audit-test", "app demo-mcp-app"]);
+    expect(identitiesOf('{"AgentKey":"lab-agent-key","Target":"demo-mcp-app"}')).toEqual(["key lab-agent-key", "app demo-mcp-app"]);
     expect(identitiesOf("RefKind:User RefID:not-base64!!")).toEqual([]);
   });
 

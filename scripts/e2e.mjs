@@ -66,7 +66,7 @@ const COLORS = `(() => {
 })()`;
 async function jsonProof(p, label, shotPrefix) {
   // a pasted JSON record carries every value type, so every colour can be measured
-  await p.fill('[data-testid=paste-box]', '{"Event":"mcp_response_blocked","Client":"audit-test","User":"u-1","TopScore":1,"ok":true,"gone":null,"nested":{"list":[1,"two"]},"xss":"<img src=x onerror=alert(1)>"}');
+  await p.fill('[data-testid=paste-box]', '{"Event":"mcp_response_blocked","Client":"lab-agent-key","User":"u-1","TopScore":1,"ok":true,"gone":null,"nested":{"list":[1,"two"]},"xss":"<img src=x onerror=alert(1)>"}');
   await p.click('[data-testid=paste-score]'); await p.waitForSelector('[data-testid=paste-result] [role=tree]');
   const c = await p.evaluate(COLORS);
   const types = ['.jt__key', '.jt__str', '.jt__num', '.jt__bool', '.jt__null'];
@@ -199,7 +199,7 @@ async function mockProof(browser) {
     const w = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     check(`375px ${tab}: no horizontal page scroll`, w.sw <= w.iw, `${w.sw} <= ${w.iw}`);
     if (tab === 'run' || tab === 'scorecard') await p.screenshot({ path: path.join(OUT, `mock-375-${tab}.png`) });
-    if (tab === 'trace') { await p.fill('[data-testid=paste-box]', 'time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-1, client: audit-test"'); await p.click('[data-testid=paste-score]'); await p.waitForSelector('[data-testid=paste-result] [role=tree]'); const w2 = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth })); check('375px trace with a JSON tree: no horizontal page scroll', w2.sw <= w2.iw, `${w2.sw} <= ${w2.iw}`); await p.locator('[data-testid=paste-result]').scrollIntoViewIfNeeded(); await shot(p, 'mock-375-json'); }
+    if (tab === 'trace') { await p.fill('[data-testid=paste-box]', 'time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-1, client: lab-agent-key"'); await p.click('[data-testid=paste-score]'); await p.waitForSelector('[data-testid=paste-result] [role=tree]'); const w2 = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth })); check('375px trace with a JSON tree: no horizontal page scroll', w2.sw <= w2.iw, `${w2.sw} <= ${w2.iw}`); await p.locator('[data-testid=paste-result]').scrollIntoViewIfNeeded(); await shot(p, 'mock-375-json'); }
   }
   await ctx.close();
   const outside = [...reqs].filter((o) => o !== new URL(BASE).origin);
@@ -207,7 +207,7 @@ async function mockProof(browser) {
 }
 
 async function realProof(browser) {
-  const gw = await fakeGateway({ audit: '{"user":"u-live","agent":"audit-test","tool":"get_weather","decision":"allow"}' });
+  const gw = await fakeGateway({ audit: '{"user":"u-live","agent":"lab-agent-key","tool":"get_weather","decision":"allow"}' });
   const ctl = { mode: 'ok' };
   // A FAKE kubectl proxy: pod log lines for what the fake gateway received (slow on purpose, so the spinner can be seen).
   const k8s = await fakeK8s({ delayMs: 500, logText: () => (ctl.mode === 'ok' ? gatewayLog(gw).join('\n') : '') });
@@ -248,7 +248,7 @@ async function realProof(browser) {
   check('real: the kubectl proxy was asked for the pod log with container, sinceSeconds and timestamps', k8s.requests.some((r) => /\/api\/v1\/namespaces\/privilege\/pods\/gateway-abc\/log\?container=log-tailer&sinceSeconds=\d+&timestamps=true/.test(r.url)));
   check('real: the gateway got the agent key; the page never shows it', gw.requests.every((r) => r.headers.authorization === `Bearer ${KEY}`) && !(await p.content()).includes(KEY));
   const marks = await p.$$eval('[data-testid=lines-k8s-pod] mark', (ms) => ms.map((m) => `${m.dataset.field}:${m.textContent}`));
-  check('real: user, agent and tool values are marked in the retrieved tree', ['user:u-live', 'agent:audit-test', 'tool:get_weather'].every((m) => marks.includes(m)), marks.join(' | '));
+  check('real: user, agent and tool values are marked in the retrieved tree', ['user:u-live', 'agent:lab-agent-key', 'tool:get_weather'].every((m) => marks.includes(m)), marks.join(' | '));
   check('real: raw hops show the key redacted', /authorization: Bearer \*\*\*/.test(await p.evaluate(() => { document.querySelectorAll('details.hop').forEach((d) => { d.open = true; }); return document.body.textContent; })));
   await shot(p, 'real-trace-json', { fullPage: true });
   // the log source goes away: explicit failure with Retry

@@ -10,7 +10,7 @@
    "_source": {
     "@timestamp": "2026-11-07T22:16:54.933Z",
     "Data": {
-     "AgentKey": "audit-test",
+     "AgentKey": "lab-agent-key",
      "App": "demo-approval-app",
      "BaselinePhase": "learning",
      "Decision": "hitl",
@@ -41,7 +41,7 @@
    "_source": {
     "@timestamp": "2026-11-07T22:16:53.990Z",
     "Data": {
-     "AgentKey": "audit-test",
+     "AgentKey": "lab-agent-key",
      "App": "demo-approval-app",
      "BaselinePhase": "learning",
      "Decision": "hitl",
@@ -71,7 +71,7 @@
    "_source": {
     "@timestamp": "2026-11-07T22:16:43.449Z",
     "Data": {
-     "AgentKey": "audit-test",
+     "AgentKey": "lab-agent-key",
      "App": "demo-approval-app",
      "BaselinePhase": "learning",
      "Decision": "hitl",
@@ -102,7 +102,7 @@
    "_source": {
     "@timestamp": "2026-11-07T22:16:43.137Z",
     "Data": {
-     "AgentKey": "audit-test",
+     "AgentKey": "lab-agent-key",
      "App": "demo-approval-app",
      "BaselinePhase": "learning",
      "Decision": "hitl",
@@ -132,7 +132,7 @@
    "_source": {
     "@timestamp": "2026-11-07T22:15:52.045Z",
     "Data": {
-     "AgentKey": "audit-test",
+     "AgentKey": "lab-agent-key",
      "App": "demo-approval-app",
      "BaselinePhase": "learning",
      "Decision": "deny",

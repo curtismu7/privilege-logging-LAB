@@ -15,7 +15,7 @@ const json = async (r) => ({ status: r.status, body: await r.json() });
 const nowIso = (offset = 0) => new Date(Date.now() + offset).toISOString();
 const EVENTS = () => [
   { '@timestamp': nowIso(-3_600_000), message: 'Access token found for user: u-old, client: old-key' },
-  { '@timestamp': nowIso(-100), message: 'Access token found for user: u-live, client: audit-test' },
+  { '@timestamp': nowIso(-100), message: 'Access token found for user: u-live, client: lab-agent-key' },
   { '@timestamp': nowIso(-50), message: 'Principal {User u-live} has policy based capabilities for {Application demo-mcp-app}' },
   { '@timestamp': nowIso(0), message: 'MCP call detected for method tools with target: get_weather' },
 ];
@@ -135,7 +135,7 @@ test('run validation: unknown case 404, strict body 400, since bounds, cross-ori
 });
 
 test('Real: nothing is sent before the origins are confirmed (412), a wrong confirmation is refused, then the full MCP exchange runs', async () => {
-  const gw = await fakeGateway({ audit: '{"user":"u-live","agent":"audit-test","tool":"get_weather","decision":"allow"}' });
+  const gw = await fakeGateway({ audit: '{"user":"u-live","agent":"lab-agent-key","tool":"get_weather","decision":"allow"}' });
   const search = await fakeSearch({ events: EVENTS() });
   try {
     await withServer(async (url) => {
@@ -173,7 +173,7 @@ test('Real: nothing is sent before the origins are confirmed (412), a wrong conf
       const sink = body.logged.find((l) => l.source === 'search');
       assert.equal(sink.lines.length, 3);
       assert.ok(!sink.lines.some((l) => l.includes('u-old')));
-      assert.deepEqual(body.logged.find((l) => l.source === 'response').lines, ['{"user":"u-live","agent":"audit-test","tool":"get_weather","decision":"allow"}']);
+      assert.deepEqual(body.logged.find((l) => l.source === 'response').lines, ['{"user":"u-live","agent":"lab-agent-key","tool":"get_weather","decision":"allow"}']);
       // scored from what came back, with the key redacted in the raw hops
       assert.equal(body.scored, true); assert.equal(body.needsPaste, false);
       assert.deepEqual(body.score, { user: 'met', agent: 'met', tool: 'met', decision: 'met' }, 'the response header adds a decision');
@@ -343,7 +343,7 @@ test('scorecard Markdown: one row per case, the four fields, escaped pipes, the 
 
 test('/api/score: scores pasted text in either mode, inert JSON out, bounded in, strict body', async () => {
   await withServer(async (url) => {
-    const r = (await json(await post(url, '/api/score', { text: 'Access token found for user: <img src=x onerror=alert(1)>, client: audit-test\nMCP call detected for method tools with target: t' }))).body;
+    const r = (await json(await post(url, '/api/score', { text: 'Access token found for user: <img src=x onerror=alert(1)>, client: lab-agent-key\nMCP call detected for method tools with target: t' }))).body;
     assert.deepEqual([r.score.user, r.score.agent, r.score.tool, r.score.decision], ['met', 'met', 'met', 'missing']);
     assert.equal(r.attached, false);
     assert.equal((await post(url, '/api/score', { text: 'x'.repeat(250_000) })).status, 413);
@@ -397,7 +397,7 @@ test('toMarkdown: a pipe in a title or note is escaped (the row keeps 7 columns)
 
 test('inferredFlags: only evidence at the winning level counts; a field with no evidence is not inferred', () => {
   // the marker line gives agent only "partial"; the window neighbour gives the "met" that wins
-  const lines = ['level=info agent=true msg="payload audit-ab12cd34"', 'Access token found for user: u-live, client: audit-test'];
+  const lines = ['level=info agent=true msg="payload audit-ab12cd34"', 'Access token found for user: u-live, client: lab-agent-key'];
   const r = scoreLines(lines, { na: [] });
   assert.equal(r.score.agent, 'met');
   const f = inferredFlags(r, [{ source: 'k8s-pod', lines, methods: ['marker', 'window'] }]);
@@ -409,11 +409,11 @@ test('inferredFlags: only evidence at the winning level counts; a field with no 
 
 test('attachPasted re-derives the inferred flags: pasted lines that back a field clear its (inferred)', () => {
   const c = capture.cases.find((x) => x.id === 'mcp-allowed-key');
-  const win = ['Access token found for user: u-live, client: audit-test'];
+  const win = ['Access token found for user: u-live, client: lab-agent-key'];
   const r0 = scoreLines(win, { na: [] });
   const run = { source: 'real', caseId: c.id, logged: [{ source: 'k8s-pod', lines: win, methods: ['window'] }], score: r0.score, scoreInferred: inferredFlags(r0, [{ lines: win, methods: ['window'] }]) };
   assert.equal(run.scoreInferred.user, true);
-  const out = attachPasted(run, c, ['Access token found for user: u-live, client: audit-test', 'MCP call detected for method tools with target: get_weather']);
+  const out = attachPasted(run, c, ['Access token found for user: u-live, client: lab-agent-key', 'MCP call detected for method tools with target: get_weather']);
   assert.equal(out.scoreInferred.user, false); assert.equal(out.scoreInferred.agent, false); assert.equal(out.scoreInferred.tool, false);
 });
 
@@ -429,7 +429,7 @@ test('Mock: the fetched result is stored (the runs list and the scorecard see th
 
 test('Real search: a bearer token inside a search hit is redacted before it is shown or scored', async () => {
   const gw = await fakeGateway();
-  const search = await fakeSearch({ events: [{ '@timestamp': nowIso(1000), message: 'debug Authorization: Bearer hitsecrettoken987654 for user: u-live, client: audit-test' }] });
+  const search = await fakeSearch({ events: [{ '@timestamp': nowIso(1000), message: 'debug Authorization: Bearer hitsecrettoken987654 for user: u-live, client: lab-agent-key' }] });
   try {
     await withServer(async (url) => {
       await confirm(url, gw);
