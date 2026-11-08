@@ -143,6 +143,25 @@ describe("Mock mode", () => {
     expect(screen.getByTestId("run-no-credential")).not.toBeDisabled();
   });
 
+  it("from an opened Trace, Back to Run and the browser Back button both return to the Run page with that case's Open trace focused", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    await user.click(screen.getByTestId("run-mcp-allowed-key"));
+    await openTrace(user, "mcp-allowed-key");
+    await screen.findByTestId("trace-page");
+    await user.click(screen.getByTestId("back-to-run"));
+    await screen.findByTestId("run-page");
+    await waitFor(() => expect(screen.getByTestId("open-mcp-allowed-key")).toHaveFocus());
+    await user.click(screen.getByTestId("open-mcp-allowed-key"));
+    await screen.findByTestId("trace-page");
+    expect(window.location.hash).toBe("#trace/mcp-allowed-key");
+    window.history.back();
+    await screen.findByTestId("run-page", {}, { timeout: 3000 });
+    await waitFor(() => expect(screen.getByTestId("open-mcp-allowed-key")).toHaveFocus());
+  });
+
   it("Trace: every entry carries tags, and clicking tags filters the entries (any within a group, all across groups); Clear restores", async () => {
     lab = await startLab();
     const user = userEvent.setup();

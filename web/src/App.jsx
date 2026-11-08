@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import ConfirmGate from "./components/ConfirmGate";
 import DiagramPage from "./components/DiagramPage";
 import RunPage from "./components/RunPage";
@@ -58,9 +58,9 @@ export default function App() {
     Promise.all([getJson("/api/story"), getJson("/api/cases"), getJson("/api/sinks")]).then(([s, c, k]) => { setStory(s); setCases(c); setSinkInfo(k); setError(null); }, (e) => setError(e.message));
   }, [loadInfo, loadRuns]);
   useEffect(() => {
-    const on = () => setNav(parseHash());
-    window.addEventListener("hashchange", on);
-    return () => window.removeEventListener("hashchange", on);
+    const on = () => setNav((n) => { const p = parseHash(); if (n.tab === "run" && p.tab !== "run") runPos.current = { y: window.scrollY, caseId: null }; return p; });
+    window.addEventListener("hashchange", on); window.addEventListener("popstate", on);
+    return () => { window.removeEventListener("hashchange", on); window.removeEventListener("popstate", on); };
   }, []);
   useEffect(() => {
     const on = (e) => {
@@ -73,7 +73,22 @@ export default function App() {
     return () => window.removeEventListener("keydown", on);
   }, []);
 
-  const go = (tab, caseId = null) => { setNav({ tab, caseId }); try { window.history.replaceState(null, "", `#${tab}${caseId ? `/${caseId}` : ""}`); } catch { /* ignore */ } };
+  // Each page change is a history entry, so the browser Back button returns to the Run page. Leaving Run remembers where it was
+  // (scroll position and the case whose trace was opened); coming back puts that case card back in view.
+  const runPos = useRef(null);
+  const go = (tab, caseId = null) => {
+    if (nav.tab === "run" && tab !== "run") runPos.current = { y: window.scrollY, caseId: tab === "trace" ? caseId : null };
+    setNav({ tab, caseId });
+    const hash = `#${tab}${caseId ? `/${caseId}` : ""}`;
+    try { if (window.location.hash !== hash) window.history.pushState(null, "", hash); } catch { /* ignore */ }
+  };
+  useLayoutEffect(() => {
+    if (nav.tab !== "run" || !runPos.current || !cases) return;
+    const { y, caseId } = runPos.current; runPos.current = null;
+    const card = caseId && document.querySelector(`[data-testid="case-${caseId}"]`);
+    if (card) { card.scrollIntoView?.({ block: "center" }); document.querySelector(`[data-testid="open-${caseId}"]`)?.focus({ preventScroll: true }); }
+    else window.scrollTo?.(0, y);
+  }, [nav.tab, cases]);
   const selected = nav.caseId && cases?.cases.some((c) => c.id === nav.caseId) ? nav.caseId : (cases?.cases[0]?.id ?? null);
 
   const setPhase = useCallback((id, p) => setBusy((b) => { const n = { ...b }; if (p) n[id] = p; else delete n[id]; return n; }), []);
@@ -217,6 +232,7 @@ export default function App() {
         {/* A disabled Real button is skipped by Tab and shows no tooltip on touch, so its how-to is also on the page. */}
         {realHint && !presenter && <p className="muted" id="real-hint" data-testid="real-hint">Real is unavailable: {realHint}</p>}
         <h1 ref={titleRef} tabIndex={-1}>{TITLES[nav.tab]}</h1>
+        {nav.tab === "trace" && <p><button type="button" onClick={() => go("run")} data-testid="back-to-run">← Back to Run</button></p>}
         {!presenter && story && nav.tab === "run" && <p className="intro">{story.intro}</p>}
         <p className="sr-only" role="status" aria-live="polite" data-testid="status">{notice}</p>
         {notice && !presenter && <p className="notice" data-testid="notice">{notice}</p>}
