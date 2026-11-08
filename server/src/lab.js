@@ -112,7 +112,7 @@ export function mockFetch(run, c, capture) {
   return {
     ...run, logged: full.logged.map((l) => ({ ...l, methods: l.lines.map(() => 'recorded') })), marks: full.marks, score: full.score, scoreNotes: full.scoreNotes,
     recomputed: full.recomputed, scored: true, needsPaste: false,
-    retrieval: { state: 'found', phase: 'done', simulated: true, attempt: 1, method: 'recorded', detail: 'Recorded sample lines from the 2026-11-07 measurement.' },
+    retrieval: { state: 'found', phase: 'done', simulated: true, attempt: 1, method: 'recorded', detail: `Recorded sample lines from the ${capture.capturedOn} measurement.` },
   };
 }
 

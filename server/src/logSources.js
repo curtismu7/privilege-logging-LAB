@@ -85,7 +85,7 @@ export async function readSearch({ client, search, index, fromMs, toMs, trace })
   try {
     const r = await searchWindow({ client, searchUrl: search.origin, index, fromMs, toMs, trace });
     const hop = { ...r.hop, response: { ...r.hop.response, body: redactLine(String(r.hop.response.body).slice(0, 4000)) } };
-    return { lines: r.lines.map((l) => { const text = redactLine(l.text); return { text, ts: l.ts, kind: kindOf({ text }) }; }), hops: [hop], truncated: false, notes: '' };
+    return { lines: r.lines.map((l) => { const text = redactLine(l.text); return { text, ts: l.ts, kind: kindOf({ text }) }; }), hops: [hop], truncated: !!r.truncated, notes: r.truncated ? 'the search answer was cut at the size cap (the newest events are kept)' : '' };
   } catch (e) { throw Object.assign(e, { hops: e.hop ? [e.hop] : [] }); }
 }
 

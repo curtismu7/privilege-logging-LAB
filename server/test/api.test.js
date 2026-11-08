@@ -335,7 +335,7 @@ test('scorecard Markdown: one row per case, the four fields, escaped pipes, the 
     assert.equal(rows.filter((r) => /\| not measured \| not measured \| not measured \| not measured \|/.test(r)).length, capture.realOnly.length, 'unmeasured cases say so, never a result');
     assert.match(md, /Measured on 2026-11-07 \(replay of recorded transactions, not a live test\)/);
     assert.match(md, /\| Allowed tool call, signed-in user \| MCP \| met \| partial \| met \| partial \|/);
-    assert.match(md, /\| Intent encoder not reachable from the gateway \| Intent \| n\/a \| n\/a \| n\/a \| partial \|/);
+    assert.match(md, /\| Intent encoder not reachable from the gateway \| Intent \| n\/a \| n\/a \| n\/a \| missing \|/);
     assert.match(md, /met = a log line names it/);
     for (const r of rows) assert.equal(r.replace(/\\\|/g, '').split('|').length, 9, r); // 7 columns => 8 pipes => 9 parts
   });
