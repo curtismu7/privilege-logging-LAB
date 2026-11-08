@@ -148,3 +148,14 @@ button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:h
    dashed edge. Muted on --surface-2 stays above 4.5:1 in both themes. Override here; standalone-ui.css is vendored. */
 button.primary:disabled { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--muted); opacity: 1; }
 .priv-filters { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; margin: 0.5rem 0; }
+/* Entry tags and the tag filter (Trace): unselected tags keep readable text on surface-2; selected = accent fill. */
+.tagfilter { display: grid; gap: 0.35rem; margin: 0.5rem 0 0.75rem; }
+.tagfilter__group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.tagfilter__label { font-size: 0.72rem; min-width: 9rem; }
+.entry__tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.3rem 0; }
+.etag { min-height: 26px; font-weight: 500; font-size: 0.72rem; line-height: 1.3; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); border-left-width: 3px; background: var(--surface-2); color: var(--text); cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+.etag--type { border-left-color: var(--status-info); } .etag--match { border-left-color: var(--status-ok); }
+.etag--identity { border-left-color: var(--status-warn); } .etag--label { border-left-color: var(--muted); }
+.etag--on { background: var(--accent); color: var(--on-accent); border-color: var(--on-accent-border); }
+.etag__n { opacity: 0.75; }
+.etag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

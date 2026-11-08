@@ -131,8 +131,9 @@ export default function App() {
     setFocusReq({ target: from || (ids.length === 1 ? `run-${ids[0]}` : "run-all") });
   }, [doRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onRun = (id) => runList([id], { openTrace: true });
-  const onLook = (id, sinceIso) => doRun(id, { since: sinceIso }).then((r) => { if (r === "ok") { go("trace", id); setFocusReq({ target: "title" }); } });
+  // Run stays on the Run page: the result shows on the card and focus returns to its Run button (Open trace is a separate click).
+  const onRun = (id) => runList([id]);
+  const onLook = (id, sinceIso) => doRun(id, { since: sinceIso }).then(() => setFocusReq({ target: `run-${id}` }));
   const onRunAll = () => runList(cases.cases.filter((c) => (info?.source === "real" ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).map((c) => c.id), { from: "run-all" });
   useEffect(() => {
     if (!focusReq || running) return;

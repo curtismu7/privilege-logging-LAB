@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased (entry tags)
+
+- Trace: every log entry has clickable tags (event type, this call or nearby, labels, identity) and each sink has a tag filter with counts.
+- Run stays on the Run page: the result shows on the card and focus goes back to that Run button; Open trace is a separate click. Look for entries works the same way.
+
 ## Unreleased (workload token)
 
 - Valid workload token: the lab mints the token itself (ES256, 300 s, key derived from `PRIV_LOG_FED_SIGNING_SEED`, audience from `PRIV_LOG_FED_AUDIENCE`). `npm run fed-key` makes the seed. The case card and `GET /api/fed-setup` show the public issuer, subject and JWKS, plus the console steps. A pasted token still overrides the minted one. Measured on a live gateway 2026-11-08: `workload token accepted`, call answered 200.
