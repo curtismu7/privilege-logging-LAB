@@ -194,7 +194,7 @@ async function mockProof(browser) {
   // 375px
   const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, colorScheme: 'dark' });
   const p = await ctx.newPage();
-  for (const tab of ['run', 'trace', 'scorecard', 'sinks', 'diagram', 'talk']) {
+  for (const tab of ['run', 'trace', 'req9', 'scorecard', 'sinks', 'diagram', 'talk']) {
     await p.goto(`${BASE}#${tab}`); await p.waitForSelector('[data-testid=banner]'); await p.waitForTimeout(300);
     const w = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     check(`375px ${tab}: no horizontal page scroll`, w.sw <= w.iw, `${w.sw} <= ${w.iw}`);

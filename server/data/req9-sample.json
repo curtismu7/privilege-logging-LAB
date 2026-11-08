@@ -1,0 +1,310 @@
+{
+ "channel": "Privilege -> Elasticsearch (Privilege hosted), read through the console",
+ "label": "recorded shapes, placeholder values",
+ "recordedOn": "2026-11-07",
+ "clock": "2026-11-07T22:20:00.000Z",
+ "note": "Recorded shapes, placeholder values. The decision records use the shape of the policy-decision-log records Privilege wrote on 2026-11-07 for our approval and block tests, and the HTTP records the proxy-audit-log shape measured on 2026-11-08. The users, agent keys, apps, policy ids and request ids are placeholders, and the no-agent, non-human and release records are illustrative: they show each pattern Real finds, not a measured run.",
+ "hits": [
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:53.990Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "User::\"<user-1>\"",
+     "PrincipalKind": "User",
+     "User": "<user-1>",
+     "AgentKey": "demo-agent-key",
+     "App": "demo-approval-app",
+     "Decision": "hitl",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Reason": "This is HITL",
+     "Target": "SearchIndexTool",
+     "Event": "policy_decision",
+     "RequestID": "0000000000000a01"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:54.933Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "User::\"<user-1>\"",
+     "PrincipalKind": "User",
+     "User": "<user-1>",
+     "AgentKey": "demo-agent-key",
+     "App": "demo-approval-app",
+     "Decision": "hitl",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Reason": "This is HITL",
+     "Target": "SearchIndexTool",
+     "Event": "policy_approval_required",
+     "RequestID": "0000000000000a01",
+     "InstructionID": "<instruction-id>"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:15:52.045Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "transaction",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "User::\"<user-1>\"",
+     "PrincipalKind": "User",
+     "User": "<user-1>",
+     "AgentKey": "demo-agent-key",
+     "App": "demo-approval-app",
+     "Decision": "deny",
+     "Event": "policy_decision",
+     "PolicyIDs": [
+      "block-generic-api:1"
+     ],
+     "Reason": "this tool can call any search API endpoint - blocked outright, no approval path",
+     "RequestID": "0000000000000a02",
+     "Target": "GenericOpenSearchApiTool"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T21:47:47.120Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "NonHumanIdentity::\"demo-workload\"",
+     "PrincipalKind": "NonHumanIdentity",
+     "User": "demo-workload",
+     "AgentKey": "demo-nhi-agent-key",
+     "App": "demo-nhi-app",
+     "Decision": "deny",
+     "Event": "policy_decision",
+     "PolicyIDs": [
+      "nhi-scope-search:1"
+     ],
+     "Reason": "SearchIndexTool needs the search scope in the agent's token",
+     "RequestID": "0000000000000a03",
+     "Target": "SearchIndexTool"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T21:21:16.400Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "User::\"<user-1>\"",
+     "PrincipalKind": "User",
+     "User": "<user-1>",
+     "App": "demo-approval-app",
+     "Decision": "hitl",
+     "Event": "policy_decision",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Reason": "This is HITL",
+     "RequestID": "0000000000000a04",
+     "Target": "SearchIndexTool"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T21:21:17.010Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "User::\"<user-1>\"",
+     "PrincipalKind": "User",
+     "User": "<user-1>",
+     "App": "demo-approval-app",
+     "Decision": "hitl",
+     "Event": "policy_approval_required",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Reason": "This is HITL",
+     "RequestID": "0000000000000a04",
+     "Target": "SearchIndexTool",
+     "InstructionID": "<instruction-id>"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T21:21:44.700Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "User::\"<user-1>\"",
+     "PrincipalKind": "User",
+     "User": "<user-1>",
+     "App": "demo-approval-app",
+     "Decision": "allow",
+     "Event": "policy_approval_released",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Reason": "approved",
+     "RequestID": "0000000000000a05",
+     "Target": "SearchIndexTool"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T20:05:10.300Z",
+    "Data": {
+     "BaselinePhase": "learning",
+     "Flow": "mcp",
+     "GrantShape": "transaction",
+     "Method": "tools/call",
+     "PrincipalResolved": true,
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Principal": "User::\"<user-1>\"",
+     "PrincipalKind": "User",
+     "User": "<user-1>",
+     "App": "demo-approval-app",
+     "Decision": "deny",
+     "Event": "policy_decision",
+     "PolicyIDs": [
+      "block-generic-api:1"
+     ],
+     "Reason": "this tool can call any search API endpoint - blocked outright, no approval path",
+     "RequestID": "0000000000000a06",
+     "Target": "GenericOpenSearchApiTool"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "proxy-audit-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:10:02.250Z",
+    "Message": "Received HTTP request",
+    "Level": "INFO",
+    "Data": {
+     "Path": "/demo-approval-app/mcp",
+     "Tenant": "<tenant>",
+     "User": "<user-1>",
+     "Device": "<device>",
+     "Host": "<host>",
+     "Method": "POST",
+     "Headers": {
+      "X-Request-Id": [
+       "<x-request-id>"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "_index": "proxy-audit-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:11:30.800Z",
+    "Message": "Received HTTP request",
+    "Level": "INFO",
+    "Data": {
+     "Path": "/demo-approval-app/mcp",
+     "Tenant": "<tenant>",
+     "User": "<user-1>",
+     "Device": "<device>",
+     "Host": "<host>",
+     "Method": "POST",
+     "Headers": {
+      "X-Request-Id": [
+       "<x-request-id>"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "_index": "proxy-audit-log",
+   "_source": {
+    "@timestamp": "2026-11-07T21:58:41.020Z",
+    "Message": "Received HTTP request",
+    "Level": "INFO",
+    "Data": {
+     "Path": "/demo-approval-app/mcp",
+     "Tenant": "<tenant>",
+     "User": "<user-1>",
+     "Device": "<device>",
+     "Host": "<host>",
+     "Method": "POST",
+     "Headers": {
+      "X-Request-Id": [
+       "<x-request-id>"
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

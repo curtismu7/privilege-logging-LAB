@@ -8,6 +8,7 @@ import SinksPage from "./components/SinksPage";
 import TalkTrack from "./components/TalkTrack";
 import TracePage from "./components/TracePage";
 import PrivilegePage from "./components/PrivilegePage";
+import Req9Page from "./components/Req9Page";
 import { confirmGateway, fetchLog, getJson, resetWorkspace, runCase, setBearer, setMode } from "./api";
 import { THEMES, applyTheme, savedTheme } from "./theme";
 
@@ -15,20 +16,26 @@ export const TABS = [
   { id: "run", label: "Run" },
   { id: "trace", label: "Trace" },
   { id: "privilege", label: "Privilege -> Elasticsearch" },
+  { id: "req9", label: "Requirement 9" },
   { id: "scorecard", label: "Scorecard" },
   { id: "sinks", label: "Where it's logged" },
   { id: "diagram", label: "Diagram" },
   { id: "talk", label: "Talk track" },
 ];
-const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", privilege: "Privilege -> Elasticsearch: only what Privilege itself logged", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
+const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", privilege: "Privilege -> Elasticsearch: only what Privilege itself logged", req9: "Requirement 9: who called which tool, as whom, and what the policy said", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
 // Never blank: until /api/story answers (or if it fails) the banner says the safe thing.
 export const BANNER_UNKNOWN = "SIMULATED. Replay of transactions measured on 2026-11-07; nothing is sent.";
 // /api/info failed: the page does not know the mode, so it must not claim Mock ("nothing is sent") or Real. Runs are disabled.
 export const BANNER_MODE_UNKNOWN = "MODE UNKNOWN. The lab's mode could not be read (/api/info failed), so this page cannot say whether a Run is simulated or sent. Runs are disabled until it loads: press Retry.";
 
+// #<tab>/<case-id>; the Requirement 9 tab takes #req9/<RequestID> (a stable deep link, Kibana links to it). The RequestID is kept
+// as given (bounded) so the page can say when it is not a valid one; the page validates it before any use.
 const parseHash = () => {
-  const [tab, id] = window.location.hash.replace("#", "").split("/");
-  return { tab: TABS.some((t) => t.id === tab) ? tab : "run", caseId: /^[a-z0-9-]{1,48}$/.test(id || "") ? id : null };
+  const [tab, ...rest] = window.location.hash.replace("#", "").split("/");
+  const id = rest.join("/");
+  const t = TABS.some((x) => x.id === tab) ? tab : "run";
+  if (t === "req9") { let rid = id; try { rid = decodeURIComponent(id); } catch { /* keep as typed */ } return { tab: t, caseId: null, rid: rid ? rid.slice(0, 200) : null }; }
+  return { tab: t, caseId: /^[a-z0-9-]{1,48}$/.test(id || "") ? id : null };
 };
 
 export default function App() {
@@ -78,7 +85,7 @@ export default function App() {
   const runPos = useRef(null);
   const go = (tab, caseId = null) => {
     if (nav.tab === "run" && tab !== "run") runPos.current = { y: window.scrollY, caseId: tab === "trace" ? caseId : null };
-    setNav({ tab, caseId });
+    setNav(tab === "req9" ? { tab, caseId: null, rid: caseId } : { tab, caseId });
     const hash = `#${tab}${caseId ? `/${caseId}` : ""}`;
     try { if (window.location.hash !== hash) window.history.pushState(null, "", hash); } catch { /* ignore */ }
   };
@@ -246,6 +253,7 @@ export default function App() {
           <>
             {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} gate={inlineGate ? gate : null} onConfirm={onConfirm} onCancelGate={() => setGate(null)} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "privilege" && <PrivilegePage info={info} signal={signal} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
+            {nav.tab === "req9" && <Req9Page info={info} signal={signal} rid={nav.rid || null} onSelect={(rid) => go("req9", rid)} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
             {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id], { from: "trace-run" })} onRetry={retry} onChanged={loadRuns} running={running} />}
             {nav.tab === "scorecard" && <ScorecardPage info={info} runsSignal={`${signal}:${Object.keys(runs).length}:${Object.values(runs).map((r) => `${r.ranAt}${r.scored}${r.logged.length}`).join("")}`} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "sinks" && <SinksPage sinkInfo={sinkInfo} story={story} />}

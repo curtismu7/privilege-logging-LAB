@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased (Requirement 9 tab)
+
+- Requirement 9 tab (`#req9`): the customer's audit clause (a user, b agent, c tool, d decision) mapped onto Privilege's own `policy-decision-log` and `proxy-audit-log` records over the last 90 days. A ReactFlow relationship view of one selected decision record (values from the record, dashed red where a part is absent, dashed link to the approval hold with the same RequestID), coverage tiles a-d with met / partial chips, a ledger of one example per pattern (held, denied, non-human caller, no agent key, approval released under a new RequestID, plain allowed call) and the three gaps in plain words.
+- Record picker: every decision record newest first with search (RequestID, user, agent key, tool, app) and Previous / Next; linked records by RequestID and, for an approval release, by user, tool and time within 10 minutes.
+- Deep link `#req9/<RequestID>` (stable, for Kibana's field URL formatter); an invalid id is never sent and an unknown one falls back to the newest record with a note.
+- `GET /api/req9[?rid=]`: read-only, strict 400 on anything else; Real behind the confirm gate with redaction, the record cap and a one-minute cache per tab; Mock from `server/data/req9-sample.json` (placeholder values).
+- Privilege record fields now include `method`, `path` and `policyIds`; diagram nodes may carry `sub` lines.
+
 ## Unreleased (case tags)
 
 - Run page: every case card carries tags (area, expected allow/refuse, call, credential, measured or not) and an open tag panel above the cards filters them, shelf style; sections with no matching card hide. Clicking a tag on a card toggles it too.
