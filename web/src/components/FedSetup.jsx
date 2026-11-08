@@ -22,7 +22,7 @@ export default function FedSetup({ bearerConfigured }) {
         <li>In the Privilege console add a <strong>Federated Identity</strong> (platform OIDC):
           <ul>
             <li>Issuer: <code data-testid="fed-issuer">{s.issuer}</code></li>
-            <li>Subject: <code>{s.subject}</code> (pin it; leave "allow any subject" off)</li>
+            <li>Subject: allow any subject, and add <strong>required claims</strong> <code>sub</code> = <code>{s.subject}</code> and <code>iss</code> = the issuer above. That way only the lab's tokens match. The console refuses a pinned subject when <code>sub</code> also names the end user.</li>
             <li>Keys: paste this JWKS (no JWKS URI: the gateway cannot reach this lab){s.jwks ? null : " — run step 1 first"}</li>
           </ul>
           {s.jwks && <pre className="code" data-testid="fed-jwks">{JSON.stringify(s.jwks)}</pre>}

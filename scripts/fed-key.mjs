@@ -21,7 +21,8 @@ try { signer = signerFrom(seed); } catch (e) { console.error(`The seed in the se
 console.log(`
 Enter these in the Privilege console (Federated Identity, platform OIDC):
   Issuer:              ${FED_ISSUER}
-  Subject:             ${FED_SUBJECT}   (pin it; leave "allow any subject" off)
+  Subject:             allow any subject, with required claims sub = ${FED_SUBJECT} and iss = the issuer above
+                       (the console refuses a pinned subject when sub also names the end user)
   Keys (paste JWKS):   ${JSON.stringify(signer.jwks)}
   Max token lifetime:  ${FED_TOKEN_LIFE_SEC} seconds or more (the lab's tokens live ${FED_TOKEN_LIFE_SEC} s)
   Scopes:              mcp
