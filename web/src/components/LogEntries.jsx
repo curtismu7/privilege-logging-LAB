@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import { TagFilter, TagPills } from "./TagFilter";
 import { parseLogLine } from "../lib/logEntry";
 import { FIELDS, FIELD_LABEL, fieldsOf } from "../lib/marks";
 import { Chip, LevelChip } from "./Chips";
 import JsonTree, { FieldLegend } from "./JsonTree";
-import { matchesAll, tagId, tagsFor } from "../lib/entryTags";
+import { matchesAll, tagsFor } from "../lib/entryTags";
 
 const METHOD = {
   marker: ["ok", "matched by marker"], window: ["warn", "time window: inferred"], recorded: ["info", "recorded sample"],
@@ -16,66 +17,6 @@ const SHOW = 50;
 const KIND = { runtime: ["ok", "runtime event"], console: ["info", "console event"], unknown: ["neutral", "kind unknown"] };
 const GROUPS = [["type", "Event type"], ["match", "This call or nearby"], ["label", "Labels"], ["identity", "Identity"]];
 
-// Styled after the Demo Shelf's tag filter (demo-shelf-LAB): a "Filter by tag" toggle, then a panel of groups with a pill per tag
-// and its count, "X of Y shown", Clear tags / Hide tags. A count is how many entries that tag would leave with every other group's
-// selection applied (within a group, tags add up); a tag that would leave none is disabled unless it is selected.
-function TagFilter({ tagsByEntry, selected, onToggle, onClear, shown, total }) {
-  const [open, setOpen] = useState(false);
-  const all = new Map();
-  for (const tags of tagsByEntry) for (const t of tags) all.set(tagId(t), t);
-  const countFor = (t) => {
-    const others = new Set([...selected].filter((id) => !id.startsWith(`${t.group}:`)));
-    others.add(tagId(t));
-    return tagsByEntry.filter((tags) => matchesAll(tags, others)).length;
-  };
-  const status = <span className="tag-filters__count" role="status" data-testid="tag-filter-count">{shown} of {total} shown</span>;
-  if (!open && selected.size === 0) {
-    return <p className="tag-toggle"><button type="button" aria-expanded="false" onClick={() => setOpen(true)} data-testid="tag-filter-open">Filter by tag</button> {status}</p>;
-  }
-  return (
-    <section className="tag-filters" aria-label="Filter entries by tag" data-testid="tag-filter">
-      {GROUPS.map(([g, label]) => {
-        const items = [...all.values()].filter((t) => t.group === g).map((t) => ({ t, n: countFor(t) })).sort((a, b) => b.n - a.n || a.t.value.localeCompare(b.t.value));
-        if (!items.length) return null;
-        return (
-          <div key={g} role="group" aria-label={label} className="tag-filters__row">
-            <span className="tag-filters__group">{label}</span>
-            {items.map(({ t, n }) => {
-              const on = selected.has(tagId(t));
-              return (
-                <button key={tagId(t)} type="button" className="tag-chip" aria-pressed={on} disabled={!on && n === 0} onClick={() => onToggle(tagId(t))} data-testid="filter-tag" data-tag={tagId(t)}>
-                  {t.value} <small>{n}</small>
-                </button>
-              );
-            })}
-          </div>
-        );
-      })}
-      <div className="tag-filters__bar">
-        {status}
-        {selected.size > 0 && <button type="button" onClick={onClear} data-testid="tag-filter-clear">Clear tags</button>}
-        {selected.size === 0 && <button type="button" aria-expanded="true" onClick={() => setOpen(false)} data-testid="tag-filter-hide">Hide tags</button>}
-      </div>
-    </section>
-  );
-}
-
-// The tags on one entry, as the shelf shows tags on a box: small pills (a picked one is filled), at most MAX_PILLS, then "+N more".
-const MAX_PILLS = 6;
-function EntryTags({ tags, selected, onToggle }) {
-  const [more, setMore] = useState(false);
-  const shown = more ? tags : tags.slice(0, MAX_PILLS);
-  return (
-    <ul className="tag-pills" aria-label="Tags" data-testid="entry-tags">
-      {shown.map((t) => (
-        <li key={tagId(t)}>
-          <button type="button" className="tag-pill" aria-pressed={selected.has(tagId(t))} onClick={() => onToggle(tagId(t))} data-testid="entry-tag" data-tag={tagId(t)}>{t.value}</button>
-        </li>
-      ))}
-      {!more && tags.length > MAX_PILLS && <li><button type="button" className="tag-more" onClick={() => setMore(true)} data-testid="entry-tags-more">+{tags.length - MAX_PILLS} more</button></li>}
-    </ul>
-  );
-}
 
 export default function LogEntries({ lines, methods = [], marks = {}, testId = "lines", scored = true, from = "", kinds = [], indices = [] }) {
   const [all, setAll] = useState(false);
@@ -92,7 +33,7 @@ export default function LogEntries({ lines, methods = [], marks = {}, testId = "
   return (
     <div data-testid={testId}>
       <FieldLegend />
-      <TagFilter tagsByEntry={tagsByEntry} selected={selected} onToggle={toggle} onClear={() => setSelected(new Set())} shown={visibleIdx.length} total={lines.length} />
+      <TagFilter groups={GROUPS} label="Filter entries by tag" tagsByEntry={tagsByEntry} selected={selected} onToggle={toggle} onClear={() => setSelected(new Set())} shown={visibleIdx.length} total={lines.length} />
       <ol className="entries">
         {visibleIdx.slice(0, shown).map((i) => {
           const line = lines[i];
@@ -107,7 +48,7 @@ export default function LogEntries({ lines, methods = [], marks = {}, testId = "
                 {word && <Chip kind={kind} testId="entry-method">{word}</Chip>}
                 {fs.map((f) => <span key={f.field} className="ltag"><span className="ltag__name">{FIELD_LABEL[f.field]}</span> <LevelChip level={f.level} /></span>)}
               </div>
-              <EntryTags tags={tagsByEntry[i]} selected={selected} onToggle={toggle} />
+              <TagPills tags={tagsByEntry[i]} selected={selected} onToggle={toggle} />
               <JsonTree value={parsed[i].value} raw={line} marks={textMarks(i)} label={`Log entry ${i + 1}`} testId={`entry-${i}`} />
             </li>
           );

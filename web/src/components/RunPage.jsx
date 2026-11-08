@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { TagFilter, TagPills } from "./TagFilter";
+import { CASE_GROUPS, caseTags } from "../lib/caseTags";
+import { matchesAll } from "../lib/entryTags";
 import Busy from "./Busy";
 import FedSetup from "./FedSetup";
 import ConfirmGate from "./ConfirmGate";
@@ -31,17 +34,25 @@ export default function RunPage({ cases, runs, info, running, busy = {}, gate = 
   const sources = info?.retrieval?.sources || [];
   // info === null: /api/info failed, so the page cannot say whether a Run would send. Nothing runs until it loads.
   const unknown = info === null;
+  const [picked, setPicked] = useState(() => new Set());
+  const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const tagsOf = new Map(cases.cases.map((c) => [c.id, caseTags(c)]));
+  const visible = cases.cases.filter((c) => matchesAll(tagsOf.get(c.id), picked));
   return (
     <div data-testid="run-page">
       <div className="row row--between">
         <p className="lede">{real ? `Real: each Run sends the case to your gateway, then fetches the log entry${sources.length ? ` from ${sources.map((s) => s.label).join(" and ")}` : ""}. ${sources.length ? "" : "No log source is configured: you will paste the lines."}` : "Mock: each Run replays a transaction measured on the capture date, then shows its recorded log entry. Nothing is sent."}</p>
         <button type="button" className="primary" onClick={onRunAll} disabled={!!running || unknown} data-testid="run-all">Run all{real ? " runnable" : ""} ({cases.cases.filter((c) => (real ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).length})</button>
       </div>
-      {cases.groups.map((g) => (
+      <div data-testid="case-tag-filter">
+        <TagFilter groups={CASE_GROUPS} label="Filter cases by tag" startOpen tagsByEntry={[...tagsOf.values()]} selected={picked} onToggle={toggle} onClear={() => setPicked(new Set())} shown={visible.length} total={cases.cases.length} />
+      </div>
+      {visible.length === 0 && <p className="muted" data-testid="no-cases">No case has all the tags you picked. <button type="button" onClick={() => setPicked(new Set())}>Clear tags</button></p>}
+      {cases.groups.filter((g) => visible.some((c) => c.group === g)).map((g) => (
         <section key={g} aria-labelledby={`grp-${g}`}>
           <h2 id={`grp-${g}`} className="section-label">{g}{cases.cases.find((c) => c.group === g)?.realOnly ? " · not measured yet" : ""}</h2>
           <div className="card-grid">
-            {cases.cases.filter((c) => c.group === g).map((c) => {
+            {visible.filter((c) => c.group === g).map((c) => {
               const r = runs[c.id]; const b = busy[c.id];
               const active = b && (b.phase === "sending" || b.phase === "fetching");
               const mockOnlyBlock = !real && c.realOnly;
@@ -52,6 +63,7 @@ export default function RunPage({ cases, runs, info, running, busy = {}, gate = 
                 <article key={c.id} className="card" data-testid={`case-${c.id}`} aria-busy={active ? "true" : "false"} aria-labelledby={tid}>
                   <h3 className="card__title" id={tid}>{c.title}</h3>
                   <p className="muted">{c.identity}</p>
+                  <TagPills tags={tagsOf.get(c.id)} selected={picked} onToggle={toggle} />
                   <p><code>{summary(c.request)}</code></p>
                   {c.realOnly && <p className="muted" data-testid={`needs-${c.id}`}><Chip kind="warn">not measured</Chip> {c.generatedCredential ? "Nothing to supply: the lab generates the credential." : `Needs: ${c.needs.join("; ")}`}</p>}
                   {real && c.generatedCredential && <p className="muted" data-testid={`generated-${c.id}`}><Chip kind="info">credential generated</Chip> The lab sends {c.generatedCredential}; you do not supply one.</p>}

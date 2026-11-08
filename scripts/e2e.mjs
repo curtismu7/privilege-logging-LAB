@@ -111,7 +111,9 @@ async function mockProof(browser) {
     check(`mock/${theme}: POST /api/mode real answers 409 when not configured`, real409 === 409);
     await shot(p, `mock-${theme}-run`);
     // a single Run shows the two-phase spinner and stays on the Run page, at the same scroll position, with the result on the card
-    const y0 = await p.evaluate(() => window.scrollY);
+    const cardTop = () => p.evaluate(() => document.querySelector('[data-testid=case-mcp-allowed-key]').getBoundingClientRect().top);
+    await p.locator('[data-testid=case-mcp-allowed-key]').scrollIntoViewIfNeeded();
+    const y0 = await cardTop();
     await p.click('[data-testid=run-mcp-allowed-key]');
     await p.waitForSelector('[data-testid=busy-mcp-allowed-key]');
     const phase1 = await p.getAttribute('[data-testid=busy-mcp-allowed-key]', 'role');
@@ -119,7 +121,7 @@ async function mockProof(browser) {
     check(`mock/${theme}: spinner is role=status, aria-busy on the case, and reaches "Fetching the log entry"`, phase1 === 'status' && (await p.getAttribute('[data-testid=case-mcp-allowed-key]', 'aria-busy')) === 'true');
     await shot(p, `mock-${theme}-spinner`);
     await p.waitForSelector('[data-testid=open-mcp-allowed-key]', { timeout: 15000 });
-    check(`mock/${theme}: Run stays on the Run page, did not scroll, and the banner still says replay`, (await p.locator('[data-testid=run-page]').count()) === 1 && (await p.locator('[data-testid=trace-page]').count()) === 0 && Math.abs((await p.evaluate(() => window.scrollY)) - y0) < 2 && /nothing is sent/.test(await p.textContent('[data-testid=banner]')));
+    check(`mock/${theme}: Run stays on the Run page, the card did not move on screen, and the banner still says replay`, (await p.locator('[data-testid=run-page]').count()) === 1 && (await p.locator('[data-testid=trace-page]').count()) === 0 && Math.abs((await cardTop()) - y0) < 2 && /nothing is sent/.test(await p.textContent('[data-testid=banner]')));
     await p.click('[data-testid=run-all]');
     await p.waitForSelector('[data-testid=open-intent-encoder-unreachable]', { timeout: 60000 });
     check(`mock/${theme}: Run all replayed 17 cases (the 17 not-yet-measured are not run)`, (await p.locator('[data-testid^=open-]').count()) === 17);
@@ -128,6 +130,13 @@ async function mockProof(browser) {
     await p.locator('[data-testid=case-keys-revoked]').scrollIntoViewIfNeeded(); await shot(p, `mock-${theme}-realonly`);
     const rc = await (await p.request.post(`${BASE}api/run`, { headers: { 'content-type': 'application/json', origin: new URL(BASE).origin }, data: { caseId: 'keys-revoked' } })).status();
     check(`mock/${theme}: POST /api/run for a real-only case answers 409 in Mock`, rc === 409);
+    const caseCount = await p.locator('article[data-testid^=case-]').count();
+    await p.click('[data-testid=case-tag-filter] [data-testid=filter-tag][data-tag="area:Federated identity"]');
+    const fedOnly = await p.locator('article[data-testid^=case-]').count();
+    const pills = await p.locator('[data-testid=case-fed-valid-token] [data-testid=entry-tag]').count();
+    await shot(p, `mock-${theme}-run-tags`);
+    await p.click('[data-testid=case-tag-filter] [data-testid=tag-filter-clear]');
+    check(`mock/${theme}: Run page tag panel is open, cards carry tags, Federated identity = 5 cards, Clear restores`, fedOnly === 5 && pills >= 4 && (await p.locator('article[data-testid^=case-]').count()) === caseCount, `${fedOnly} of ${caseCount}, ${pills} pills`);
     const runContrast = (await p.evaluate(CONTRAST)).filter((c) => c.ratio < 3);
     check(`mock/${theme}: run page unselected control borders are 3:1 or more`, runContrast.length === 0, runContrast.slice(0, 3).map((w) => `${w.el} ${w.ratio.toFixed(2)}`).join('; '));
     await p.click('[data-testid=open-mcp-allowed-key]'); await p.waitForSelector('[data-testid=lines-gateway-log]');

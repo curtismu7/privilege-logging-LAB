@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (case tags)
+
+- Run page: every case card carries tags (area, expected allow/refuse, call, credential, measured or not) and an open tag panel above the cards filters them, shelf style; sections with no matching card hide. Clicking a tag on a card toggles it too.
+- The tag filter is one shared component for the Run page and the Trace.
+- Finishing a run no longer scrolls the page to bring the Run button into view (focus returns without scrolling).
+
 ## Unreleased (entry tags)
 
 - Trace: every log entry has clickable tags (event type, this call or nearby, labels, identity) and each sink has a tag filter with counts.
