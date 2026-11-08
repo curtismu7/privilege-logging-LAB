@@ -9,6 +9,7 @@ import { modeFrom, realConfig } from './config.js';
 import { sourcesFrom } from './logSources.js';
 import { DIAGRAM_NAMES, buildDiagram } from './diagramData.js';
 import { naFields } from './lab.js';
+import { bridgeConfig, readState, stateFile } from './bridge.js';
 
 export async function runChecks({ env = process.env } = {}) {
   const checks = [];
@@ -26,6 +27,15 @@ export async function runChecks({ env = process.env } = {}) {
       ? `log sources: ${[cfg.k8s && `Kubernetes pod log via ${cfg.k8s.origin} (namespace ${cfg.k8s.namespace}, ${cfg.k8s.pod ? `pod ${cfg.k8s.pod}` : `selector ${cfg.k8s.selector}`}, container ${cfg.k8s.container}; start it with: kubectl proxy)`, cfg.search && `search endpoint ${cfg.search.origin}${cfg.index ? ` (index ${cfg.index})` : ''}`, cfg.decisions && `policy decision log through the console ${cfg.decisions.origin} (needs the PingOne Privilege desktop app running)`].filter(Boolean).join('; ')}`
       : 'no log source configured (set PRIV_LOG_K8S_PROXY_URL + PRIV_LOG_K8S_NAMESPACE + PRIV_LOG_K8S_POD, or PRIV_LOG_SEARCH_URL): Real runs will ask you to paste the log lines');
   } else add('log-sources', 'info', 'log sources are read in Real mode only: PRIV_LOG_K8S_PROXY_URL (default http://127.0.0.1:8001), PRIV_LOG_K8S_NAMESPACE, PRIV_LOG_K8S_POD, PRIV_LOG_K8S_CONTAINER (default log-tailer), PRIV_LOG_SEARCH_URL, PRIV_LOG_SEARCH_INDEX, PRIV_LOG_CONSOLE_URL + PRIV_LOG_CONSOLE_TENANT (policy decision log)');
+
+  // The Privilege logs bridge (owner-run): configured or not, and how long since its last good pass. Reads only the state file.
+  const bc = bridgeConfig(env);
+  if (!bc.ok) add('bridge', 'info', `Privilege logs bridge not configured (${bc.problem}). Only needed to copy decision, AI Guard and approval records into the SIEM index.`);
+  else {
+    const st = readState(stateFile(env));
+    const age = st.lastRunAt ? Math.round((Date.now() - Date.parse(st.lastRunAt)) / 60_000) : null;
+    add('bridge', st.lastError ? 'info' : 'pass', st.lastRunAt ? `Privilege logs bridge: last pass ${age} min ago${st.lastError ? `, FAILED: ${st.lastError}` : `, ${st.lastCopied ?? 0} record(s) copied`}; newest copied record ${st.lastTs ? new Date(st.lastTs).toISOString() : 'none yet'}. Start it with: npm run bridge` : 'Privilege logs bridge configured but never run. Start it with: npm run bridge');
+  }
 
   try { add('bind', 'pass', `${assertBindAllowed(bindHost(env), env)}${env.PRIV_LOG_BIND ? ' (PRIV_LOG_BIND opt-in)' : ' (loopback)'}`); } catch (e) { add('bind', 'fail', e.message); }
 

@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { isLoopbackHost, isPrivateAddress } from './safety.js';
 
-export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER', 'PRIV_LOG_CONSOLE_URL', 'PRIV_LOG_CONSOLE_TENANT', 'PRIV_LOG_CONSOLE_CA'];
+export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER', 'PRIV_LOG_CONSOLE_URL', 'PRIV_LOG_CONSOLE_TENANT', 'PRIV_LOG_CONSOLE_CA', 'PRIV_LOG_BRIDGE_ES_URL', 'PRIV_LOG_BRIDGE_ES_APIKEY'];
 export const DEFAULT_K8S_PROXY = 'http://127.0.0.1:8001';
 export const DEFAULT_K8S_CONTAINER = 'log-tailer';
 // A Kubernetes object name (RFC 1123 subdomain) or a label selector such as app=privilege-gateway,tier=gw.
