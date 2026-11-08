@@ -3,7 +3,7 @@
 // Only MCP cases can be driven (tools/call, tools/list). A2A, LLM and intent cases need routes this lab has not measured: they are
 // reported as not runnable in Real (paste log lines for them instead). The key is sent as `Authorization: Bearer <key>` (UNVERIFIED
 // for every gateway build: the capture does not record how the measured agent key was presented).
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { RealError } from './realClient.js';
 import { formatTraceparent } from './trace.js';
 
@@ -20,9 +20,32 @@ export function notRunnable(c) {
   return 'This case is a gateway configuration condition, not a call this lab can make. Paste the log lines instead.';
 }
 
-// How the case authenticates: the agent key, none, or a deliberately bad credential (the Rejected cases).
+// Cases whose credential is deliberately bad, so the lab makes it itself: nothing is pasted and nothing real is sent.
+// A made-up key or token is rejected at the door for being unknown; for the token cases the one wrong claim is real, but the gateway
+// may stop at the issuer or signature before it looks at that claim (UNVERIFIED), so the log shows the rejection path, not the claim check.
+export const GENERATED = {
+  'unknown-key': 'a random made-up key that was never issued',
+  'malformed-token': 'a malformed, unsigned token',
+  'fed-wrong-audience': 'a JWT whose audience is not this gateway',
+  'fed-wrong-issuer': 'a JWT from an issuer the gateway does not trust',
+  'fed-expired-token': 'a JWT that expired an hour ago',
+  'fed-lifetime-too-long': 'a JWT valid for 30 days',
+};
+const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+export function badJwt(kind, { now = Date.now, rand = randomBytes } = {}) {
+  const t = Math.floor(now() / 1000);
+  const base = { iss: 'https://issuer.example.invalid', aud: 'https://gateway.example.invalid', sub: 'lab-generated', iat: t, exp: t + 300, jti: rand(8).toString('hex') };
+  const defect = { 'fed-wrong-audience': { aud: 'https://wrong-audience.example.invalid' }, 'fed-wrong-issuer': { iss: 'https://wrong-issuer.example.invalid' },
+    'fed-expired-token': { iat: t - 7200, exp: t - 3600 }, 'fed-lifetime-too-long': { exp: t + 2_592_000 } }[kind];
+  if (!defect) throw new Error(`no generated token for ${kind}`);
+  const head = b64u({ alg: 'HS256', typ: 'JWT' }); const body = b64u({ ...base, ...defect });
+  return `${head}.${body}.${createHmac('sha256', rand(32)).update(`${head}.${body}`).digest('base64url')}`;
+}
+
+// How the case authenticates: the agent key, none, or a deliberately bad credential the lab generates.
 export function authFor(c, key, bearer) {
   if (c.id === 'no-credential') return null;
+  if (c.id.startsWith('fed-') && GENERATED[c.id]) return `Bearer ${badJwt(c.id)}`;
   if (c.id === 'unknown-key') return `Bearer lab-unknown-${randomBytes(6).toString('hex')}`;
   if (c.id === 'malformed-token') return 'Bearer ..not.a.token..';
   if (c.request.auth === 'bearer') {

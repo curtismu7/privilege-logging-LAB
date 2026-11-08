@@ -7,18 +7,20 @@ import ShelfLink from "./components/ShelfLink";
 import SinksPage from "./components/SinksPage";
 import TalkTrack from "./components/TalkTrack";
 import TracePage from "./components/TracePage";
+import PrivilegePage from "./components/PrivilegePage";
 import { confirmGateway, fetchLog, getJson, resetWorkspace, runCase, setBearer, setMode } from "./api";
 import { THEMES, applyTheme, savedTheme } from "./theme";
 
 export const TABS = [
   { id: "run", label: "Run" },
   { id: "trace", label: "Trace" },
+  { id: "privilege", label: "Privilege -> Elasticsearch" },
   { id: "scorecard", label: "Scorecard" },
   { id: "sinks", label: "Where it's logged" },
   { id: "diagram", label: "Diagram" },
   { id: "talk", label: "Talk track" },
 ];
-const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
+const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", privilege: "Privilege -> Elasticsearch: only what Privilege itself logged", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
 // Never blank: until /api/story answers (or if it fails) the banner says the safe thing.
 export const BANNER_UNKNOWN = "SIMULATED. Replay of transactions measured on 2026-11-07; nothing is sent.";
 
@@ -101,7 +103,7 @@ export default function App() {
     setRunning(id); setNotice(""); setPhase(id, { phase: "sending" });
     try {
       const res = await runCase(id, extra);
-      if (res.status === 412) { setPhase(id, null); setGate({ gatewayOrigin: res.body.gatewayOrigin, searchOrigin: res.body.searchOrigin, k8sOrigin: res.body.k8sOrigin, queue: [id] }); return "confirm"; }
+      if (res.status === 412) { setPhase(id, null); setGate({ gatewayOrigin: res.body.gatewayOrigin, searchOrigin: res.body.searchOrigin, k8sOrigin: res.body.k8sOrigin, decisionsOrigin: res.body.decisionsOrigin, queue: [id] }); return "confirm"; }
       if (!res.ok) { setPhase(id, { phase: "error", detail: res.body.detail || res.body.error || "failed" }); return "stop"; }
       setRuns((r) => ({ ...r, [id]: res.body }));
       const rt = res.body.retrieval || {};
@@ -127,7 +129,7 @@ export default function App() {
     const { queue, openTrace } = gate;
     const res = await confirmGateway(gate.gatewayOrigin);
     if (!res.ok) { setNotice(res.body.detail || "Could not confirm."); return; }
-    setGate(null); await loadInfo();
+    setGate(null); await loadInfo(); setSignal((n) => n + 1);
     runList(queue, { openTrace });
   };
   const onBearer = async (id, value) => { const res = await setBearer(id, value); if (!res.ok) { setNotice(res.body.detail || "Could not set the credential."); return false; } await loadCases(); setNotice(value ? "Credential set for this case (write-only; it is never shown)." : "Credential cleared."); return true; };
@@ -137,6 +139,14 @@ export default function App() {
     epoch.current += 1; setBusy({}); setRuns({}); setGate(null); setSignal((n) => n + 1); loadInfo(); loadCases();
     setNotice(ok ? "Reset: this tab's runs, pasted lines and Real confirmation are cleared." : "Reset failed on the server; the view was reloaded.");
   }, [loadInfo]);
+
+  // Refresh: stop any wait for a log entry, free the Run buttons and reload the data. Unlike Reset it keeps this tab's runs.
+  const refresh = useCallback(async () => {
+    epoch.current += 1; setRunning(null); setBusy({}); setGate(null);
+    await Promise.all([loadInfo(), loadRuns(), loadCases()]);
+    setSignal((n) => n + 1);
+    setNotice("Refreshed: any wait for a log entry was stopped and the data reloaded. Your runs are kept.");
+  }, [loadInfo, loadRuns, loadCases]);
 
   // Rule 19: switch server-side, then reload every panel's data (no page reload, no restart).
   const switchTo = async (source) => {
@@ -169,6 +179,7 @@ export default function App() {
                 onClick={() => switchTo("real")}>Real</button>
             </span>
           )}
+          <button type="button" onClick={refresh} data-testid="refresh" title="Stop any wait for a log entry, free the Run buttons and reload the data. Your runs are kept.">Refresh</button>
           <button type="button" onClick={reset} data-testid="reset">Reset</button>
           <button type="button" aria-pressed={presenter} onClick={() => setPresenter((v) => !v)} data-testid="presenter">{presenter ? "Exit presenter (Esc)" : "Presenter (P)"}</button>
           <label className="shell-theme">Theme
@@ -194,6 +205,7 @@ export default function App() {
         {error ? <p className="field-error" role="alert">Could not load the lab ({error}). Is the server running?</p> : !story || !cases || !sinkInfo ? <p className="muted">Loading...</p> : (
           <>
             {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
+            {nav.tab === "privilege" && <PrivilegePage info={info} signal={signal} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
             {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id])} onRetry={retry} onChanged={loadRuns} running={running} />}
             {nav.tab === "scorecard" && <ScorecardPage info={info} runsSignal={`${signal}:${Object.keys(runs).length}:${Object.values(runs).map((r) => `${r.ranAt}${r.scored}${r.logged.length}`).join("")}`} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "sinks" && <SinksPage sinkInfo={sinkInfo} story={story} />}

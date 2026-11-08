@@ -23,9 +23,9 @@ export async function runChecks({ env = process.env } = {}) {
   if (cfg.ok) {
     const srcs = sourcesFrom(cfg);
     add('log-sources', 'info', srcs.length
-      ? `log sources: ${[cfg.k8s && `Kubernetes pod log via ${cfg.k8s.origin} (namespace ${cfg.k8s.namespace}, ${cfg.k8s.pod ? `pod ${cfg.k8s.pod}` : `selector ${cfg.k8s.selector}`}, container ${cfg.k8s.container}; start it with: kubectl proxy)`, cfg.search && `search endpoint ${cfg.search.origin}${cfg.index ? ` (index ${cfg.index})` : ''}`].filter(Boolean).join('; ')}`
+      ? `log sources: ${[cfg.k8s && `Kubernetes pod log via ${cfg.k8s.origin} (namespace ${cfg.k8s.namespace}, ${cfg.k8s.pod ? `pod ${cfg.k8s.pod}` : `selector ${cfg.k8s.selector}`}, container ${cfg.k8s.container}; start it with: kubectl proxy)`, cfg.search && `search endpoint ${cfg.search.origin}${cfg.index ? ` (index ${cfg.index})` : ''}`, cfg.decisions && `policy decision log through the console ${cfg.decisions.origin} (needs the PingOne Privilege desktop app running)`].filter(Boolean).join('; ')}`
       : 'no log source configured (set PRIV_LOG_K8S_PROXY_URL + PRIV_LOG_K8S_NAMESPACE + PRIV_LOG_K8S_POD, or PRIV_LOG_SEARCH_URL): Real runs will ask you to paste the log lines');
-  } else add('log-sources', 'info', 'log sources are read in Real mode only: PRIV_LOG_K8S_PROXY_URL (default http://127.0.0.1:8001), PRIV_LOG_K8S_NAMESPACE, PRIV_LOG_K8S_POD, PRIV_LOG_K8S_CONTAINER (default log-tailer), PRIV_LOG_SEARCH_URL, PRIV_LOG_SEARCH_INDEX');
+  } else add('log-sources', 'info', 'log sources are read in Real mode only: PRIV_LOG_K8S_PROXY_URL (default http://127.0.0.1:8001), PRIV_LOG_K8S_NAMESPACE, PRIV_LOG_K8S_POD, PRIV_LOG_K8S_CONTAINER (default log-tailer), PRIV_LOG_SEARCH_URL, PRIV_LOG_SEARCH_INDEX, PRIV_LOG_CONSOLE_URL + PRIV_LOG_CONSOLE_TENANT (policy decision log)');
 
   try { add('bind', 'pass', `${assertBindAllowed(bindHost(env), env)}${env.PRIV_LOG_BIND ? ' (PRIV_LOG_BIND opt-in)' : ' (loopback)'}`); } catch (e) { add('bind', 'fail', e.message); }
 

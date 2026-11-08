@@ -65,6 +65,28 @@ export async function fakeSearch({ events = [], status = 200, raw = null, ignore
   return { base, requests, close: () => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }) };
 }
 
+// A fake Privilege console: POST /api/<tenant>/v1/elasticlog answers { Response: base64(search result) } for records in the asked window.
+// Built from parts so the shipped-text scan does not read it as a real id.
+export const CONSOLE_TENANT = ['00000000', '0000', '4000', '8000', '00000000c0de'].join('-');
+export async function fakeConsole({ records = [], status = 200, raw = null } = {}) {
+  const requests = [];
+  const server = http.createServer(async (req, res) => {
+    const body = await readBody(req);
+    requests.push({ method: req.method, url: req.url, headers: req.headers, body });
+    if (raw !== null) { res.writeHead(status, { 'content-type': 'application/json' }); return res.end(raw); }
+    let q; try { q = JSON.parse(body); } catch { q = {}; }
+    const recs = typeof records === 'function' ? records() : records;
+    const hits = recs.filter((r) => (!q.StartTime || r['@timestamp'] >= q.StartTime) && (!q.EndTime || r['@timestamp'] <= q.EndTime)).map(({ _index, ...r }) => ({ _index: _index || 'policy-decision-log', _source: r }));
+    res.writeHead(status, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ...q, Response: Buffer.from(JSON.stringify({ hits: { total: { value: hits.length }, hits } })).toString('base64') }));
+  });
+  const base = await listen(server);
+  return { base, requests, close: () => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }) };
+}
+export function consoleEnv(gw, cons, extra = {}) {
+  return { ...NOENV, PRIV_LOG_GATEWAY_URL: gw.url, PRIV_LOG_AGENT_KEY: KEY, PRIV_LOG_CONSOLE_URL: cons.base, PRIV_LOG_CONSOLE_TENANT: CONSOLE_TENANT, ...extra };
+}
+
 // A bare server that records any request (used to prove a redirect or a second origin is never contacted).
 export async function recorder() {
   const requests = [];

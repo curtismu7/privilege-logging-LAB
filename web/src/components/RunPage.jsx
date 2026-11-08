@@ -46,7 +46,8 @@ export default function RunPage({ cases, runs, info, running, busy = {}, onRun, 
                   <h3 className="card__title">{c.title}</h3>
                   <p className="muted">{c.identity}</p>
                   <p><code>{summary(c.request)}</code></p>
-                  {c.realOnly && <p className="muted" data-testid={`needs-${c.id}`}><Chip kind="warn">not measured</Chip> Needs: {c.needs.join("; ")}</p>}
+                  {c.realOnly && <p className="muted" data-testid={`needs-${c.id}`}><Chip kind="warn">not measured</Chip> {c.generatedCredential ? "Nothing to supply: the lab generates the credential." : `Needs: ${c.needs.join("; ")}`}</p>}
+                  {real && c.generatedCredential && <p className="muted" data-testid={`generated-${c.id}`}><Chip kind="info">credential generated</Chip> The lab sends {c.generatedCredential}; you do not supply one.</p>}
                   {mockOnlyBlock && <p className="muted" data-testid={`mockonly-${c.id}`}>{MOCK_ONLY_NOTE}</p>}
                   {real && c.realRunnable && /signed-in/i.test(c.identity) && <p className="muted" data-testid={`ident-${c.id}`}>Real sends this with the agent key (this tool has no user sign-in), so the identity differs from the measured case.</p>}
                   {real && !c.realRunnable && <p className="muted" data-testid={`note-${c.id}`}>Not runnable in Real: {c.realNote}</p>}

@@ -6,7 +6,10 @@ export default function ConfirmGate({ gate, onConfirm, onCancel, busy }) {
       <h2 id="gate-title" className="card__title">Confirm before the first Real send</h2>
       <p>Real mode sends MCP requests that carry your agent key to this gateway:</p>
       <p><code data-testid="gate-gateway">{gate.gatewayOrigin}</code></p>
-      <p>{gate.searchOrigin ? <>and reads log events from <code data-testid="gate-search">{gate.searchOrigin}</code>.</> : "No search URL is configured: you will paste the gateway log lines yourself."} Only these origins are contacted. Redirects are never followed.</p>
+      {(() => {
+        const reads = [["gate-k8s", gate.k8sOrigin, "the gateway pod log (kubectl proxy)"], ["gate-search", gate.searchOrigin, "the search endpoint"], ["gate-decisions", gate.decisionsOrigin, "the policy decision log (Privilege console)"]].filter(([, o]) => o);
+        return <p>{reads.length ? <>and reads log entries from {reads.map(([id, o, what], i) => <span key={id}>{i ? "; " : ""}{what} at <code data-testid={id}>{o}</code></span>)}.</> : "No log source is configured: you will paste the gateway log lines yourself."} Only these origins are contacted. Redirects are never followed.</p>;
+      })()}
       <div className="row">
         <button type="button" className="primary" onClick={onConfirm} disabled={busy} data-testid="gate-confirm">Send to {gate.gatewayOrigin}</button>
         <button type="button" onClick={onCancel} disabled={busy} data-testid="gate-cancel">Cancel</button>

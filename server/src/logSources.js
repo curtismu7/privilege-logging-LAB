@@ -4,12 +4,18 @@
 //   k8s-pod : Kubernetes pod log through `kubectl proxy` (loopback). GET /api/v1/namespaces/<ns>/pods/<pod>/log?container=<c>&sinceSeconds=<n>
 //             &timestamps=true&tailLines=<n>. A label selector (PRIV_LOG_K8S_POD=app=name) is resolved by listing pods first.
 //   search  : an Elasticsearch/OpenSearch-style _search with a time range.
+//   privilege-hosted : Privilege's own logs in its hosted Elasticsearch, read through the console's elasticlog API
+//             (POST <console>/api/<tenant>/v1/elasticlog; the answer wraps the search result in base64): the runtime indices
+//             policy-decision-log, aiguard-log, proxy-audit-log, agent-approval-log, proxy-event-log and the console indices audit-log,
+//             event-log. Every entry keeps its index, which says whether it is a console or a runtime event.
+import { randomUUID } from 'node:crypto';
 import { RealError } from './realClient.js';
 import { hitLine } from './logparse.js';
 import { parseTs, MAX_SOURCE_LINES } from './matcher.js';
 import { redactLine } from './redact.js';
-import { MAX_LINE } from './scorer.js';
+import { MAX_LINE, MAX_LINES } from './scorer.js';
 import { formatTraceparent } from './trace.js';
+import { PRIVILEGE_INDICES, kindOf } from './eventKind.js';
 import { searchWindow } from './searchClient.js';
 
 export const K8S_MAX_BYTES = 1_048_576;
@@ -20,6 +26,7 @@ export function sourcesFrom(cfg) {
   const out = [];
   if (cfg.k8s) out.push({ id: 'k8s-pod', label: 'Kubernetes pod log (kubectl proxy)', origin: cfg.k8s.origin, host: cfg.k8s.host });
   if (cfg.search) out.push({ id: 'search', label: 'Search endpoint (_search)', origin: cfg.search.origin, host: cfg.search.host });
+  if (cfg.decisions) out.push({ id: 'privilege-hosted', label: 'Privilege logs, read through the console (elasticlog)', origin: cfg.decisions.origin, host: cfg.decisions.host });
   return out;
 }
 
@@ -78,11 +85,46 @@ export async function readSearch({ client, search, index, fromMs, toMs, trace })
   try {
     const r = await searchWindow({ client, searchUrl: search.origin, index, fromMs, toMs, trace });
     const hop = { ...r.hop, response: { ...r.hop.response, body: redactLine(String(r.hop.response.body).slice(0, 4000)) } };
-    return { lines: r.lines.map((l) => ({ text: redactLine(l.text), ts: l.ts })), hops: [hop], truncated: false, notes: '' };
+    return { lines: r.lines.map((l) => { const text = redactLine(l.text); return { text, ts: l.ts, kind: kindOf({ text }) }; }), hops: [hop], truncated: false, notes: '' };
   } catch (e) { throw Object.assign(e, { hops: e.hop ? [e.hop] : [] }); }
+}
+
+export const DECISION_MAX_BYTES = 1_048_576;
+
+// The request the console's own pages send, for all seven indices at once. The console wants an x-procyon-session-id header; the local
+// console does not check its value (a fresh random one is sent each time). Records do not carry the run marker, so they are matched to
+// the call by time window and app (inferred). Decision records carry User, AgentKey, Target (the tool), Decision, Reason and PolicyIDs.
+export async function readDecisions({ client, decisions, fromMs, toMs, trace }) {
+  const url = `${decisions.url.origin}/api/${enc(decisions.tenant)}/v1/elasticlog`;
+  const span = trace.span(); const tp = formatTraceparent(trace.traceId, span);
+  const body = JSON.stringify({ Indices: { Elems: PRIVILEGE_INDICES }, Filters: { UserName: '', DeviceName: '', ResourceName: '', RequestID: '' }, Size: 200,
+    StartTime: new Date(fromMs).toISOString(), EndTime: new Date(toMs).toISOString(), From: 0, Attributes: { Map: { track_total_hits: 'true' } }, ObjectMeta: { Namespace: 'default', Tenant: decisions.tenant } });
+  const headers = { 'content-type': 'application/json', accept: 'application/json', 'x-procyon-session-id': randomUUID(), traceparent: tp };
+  const res = await client.request({ url, method: 'POST', headers, body, maxBytes: DECISION_MAX_BYTES });
+  const hop = { n: 0, label: 'read Privilege\'s logs through the console', from: 'lab', to: 'log-source', traceparent: tp, request: { method: 'POST', url, headers, body },
+    // The answer's Response field is the search result in base64: it would carry every record (and any key in it) past the redactor,
+    // so the raw hop shows its size only. The decoded, redacted records are the entries.
+    response: { status: res.status, headers: res.headers, body: redactLine(res.text.replace(/"Response"\s*:\s*"[A-Za-z0-9+/=]*"/, (m) => `"Response":"<base64 search result, ${m.length} bytes: decoded and redacted into the entries, not shown here>"`).slice(0, 4000)), truncated: res.truncated, ms: res.ms, redirect: res.redirect } };
+  if (res.redirect) throw fail('redirect_refused', 'the console answered a redirect; redirects are never followed', hop);
+  if (res.status !== 200) throw fail('source_http_error', `the console answered HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (is the PingOne Privilege desktop app running and signed in?)' : ''}`, hop);
+  let hits = null;
+  try {
+    const outer = JSON.parse(res.text);
+    const inner = typeof outer?.Response === 'string' ? JSON.parse(Buffer.from(outer.Response.slice(0, DECISION_MAX_BYTES * 2), 'base64').toString('utf8')) : outer?.Response;
+    hits = inner?.hits?.hits;
+  } catch { /* not the console's shape */ }
+  if (!Array.isArray(hits)) throw fail('source_bad_shape', 'the console answer holds no log records (Response.hits.hits)', hop);
+  const lines = hits.slice(0, MAX_LINES).map((h) => {
+    const t = h?._source?.['@timestamp']; const ts = typeof t === 'string' ? Date.parse(t) : NaN;
+    const index = typeof h?._index === 'string' && PRIVILEGE_INDICES.includes(h._index) ? h._index : null;
+    const text = redactLine(hitLine(h));
+    return { text, ts: Number.isFinite(ts) ? ts : null, index, kind: kindOf({ index, text }) };
+  });
+  return { lines, hops: [hop], truncated: res.truncated, notes: res.truncated ? 'the console answer was cut at the size cap' : '' };
 }
 
 export async function readSource(src, { client, cfg, fromMs, toMs, now, trace }) {
   if (src.id === 'k8s-pod') return readK8s({ client, k8s: cfg.k8s, fromMs, now, trace });
+  if (src.id === 'privilege-hosted') return readDecisions({ client, decisions: cfg.decisions, fromMs, toMs, trace });
   return readSearch({ client, search: cfg.search, index: cfg.index, fromMs, toMs, trace });
 }

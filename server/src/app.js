@@ -12,7 +12,9 @@ import { bearerFromSettings, modeFrom, realConfig } from './config.js';
 import { RealError, createRealClient } from './realClient.js';
 import { setAllowedHosts } from './netguard.js';
 import { EXTRA_SINKS, REAL_ONLY_NOTE, attachPasted, caseSummary, fetchAttempt, mockFetch, mockSend, realSend, scorePasted, scorecardRows, toMarkdown } from './lab.js';
-import { sourcesFrom } from './logSources.js';
+import { readDecisions, sourcesFrom } from './logSources.js';
+import { newTrace } from './trace.js';
+import { SINK_CHANNEL } from './eventKind.js';
 import { parsePaste } from './logparse.js';
 import { buildStory } from './story.js';
 import { DIAGRAM_NAMES, buildDiagram } from './diagramData.js';
@@ -42,9 +44,10 @@ export function createApp({
   health.setRuntime?.(() => (mode === 'real' ? 'live' : 'offline'));
 
   const allCases = [...capture.cases, ...(capture.realOnly || [])];
+  const privilegeSample = JSON.parse(fs.readFileSync(new URL('../data/privilege-logs-sample.json', import.meta.url), 'utf8'));
   const byId = new Map(allCases.map((c) => [c.id, c]));
-  const clientFor = (c, bearer) => createRealClient({ origins: [c.gateway.origin, ...sourcesFrom(c).map((x) => x.origin)], secrets: [c.key, bearer].filter(Boolean), lookup, timeoutMs: realTimeoutMs, now });
-  const signature = (c) => `${c.gateway.origin}|${c.search ? c.search.origin : ''}|${c.k8s ? c.k8s.origin : ''}`;
+  const clientFor = (c, bearer) => createRealClient({ origins: [c.gateway.origin, ...sourcesFrom(c).map((x) => x.origin)], secrets: [c.key, bearer].filter(Boolean), lookup, timeoutMs: realTimeoutMs, now, loopbackNames: c.decisions ? [c.decisions.host] : [], caByHost: c.decisions?.ca ? { [c.decisions.host]: c.decisions.ca } : {} });
+  const signature = (c) => `${c.gateway.origin}|${c.search ? c.search.origin : ''}|${c.k8s ? c.k8s.origin : ''}|${c.decisions ? c.decisions.origin : ''}`;
   // A per-case credential only the owner has: the write-only field (this tab) wins over PRIV_LOG_BEARER_<CASEID>. Never returned by any API.
   const bearerOf = (ws, id) => workspaces.state(ws).bearers.get(id) || bearerFromSettings(id, env, settingsOpts);
   const sourcesInfo = (c) => (c.ok ? sourcesFrom(c).map((x) => ({ id: x.id, label: x.label, origin: x.origin })) : []);
@@ -77,7 +80,7 @@ export function createApp({
       keyConfigured: c.ok, // presence only; the key itself is write-only and never returned
       searchConfigured: c.ok && !!c.search, capturedOn: capture.capturedOn, caseCount: capture.cases.length,
       retrieval: { ...limits, mockDelayMs, sources: sourcesInfo(c) },
-      real: c.ok ? { gatewayOrigin: c.gateway.origin, searchOrigin: c.search ? c.search.origin : null, k8sOrigin: c.k8s ? c.k8s.origin : null, k8sTarget: c.k8s ? `${c.k8s.namespace}/${c.k8s.pod || c.k8s.selector}:${c.k8s.container}` : null, index: c.index, confirmed } : null,
+      real: c.ok ? { gatewayOrigin: c.gateway.origin, searchOrigin: c.search ? c.search.origin : null, k8sOrigin: c.k8s ? c.k8s.origin : null, decisionsOrigin: c.decisions ? c.decisions.origin : null, k8sTarget: c.k8s ? `${c.k8s.namespace}/${c.k8s.pod || c.k8s.selector}:${c.k8s.container}` : null, index: c.index, confirmed } : null,
     });
   }));
   // Rule 19: exactly { source: "mock"|"real" }; 409 when Real is not configured.
@@ -111,7 +114,7 @@ export function createApp({
       const entries = capture.cases.map((c) => c.logged.find((l) => l.source === s.id)).filter(Boolean);
       return [s.id, { casesRead: entries.length, casesWithLines: entries.filter((e) => e.lines.length).length, lines: entries.reduce((n, e) => n + e.lines.length, 0), totalCases: capture.cases.length }];
     }));
-    res.json({ requirement: capture.requirement, sinks: capture.sinks, extraSinks: EXTRA_SINKS, usage, capturedOn: capture.capturedOn });
+    res.json({ requirement: capture.requirement, sinks: capture.sinks, extraSinks: EXTRA_SINKS, channels: SINK_CHANNEL, usage, capturedOn: capture.capturedOn });
   });
   api.get('/diagram', (req, res) => { noStore(res); res.json({ names: DIAGRAM_NAMES, ...buildDiagram(DIAGRAM_NAMES.includes(req.query.name) ? req.query.name : undefined) }); });
 
@@ -146,7 +149,7 @@ export function createApp({
     const conf = cfg();
     if (!conf.ok) return res.status(409).json({ error: 'real_not_configured', detail: conf.problem });
     if (workspaces.state(ws).confirmed !== signature(conf)) {
-      return res.status(412).json({ error: 'confirm_required', detail: 'Real mode sends requests to your gateway. Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null });
+      return res.status(412).json({ error: 'confirm_required', detail: 'Real mode sends requests to your gateway. Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null, decisionsOrigin: conf.decisions ? conf.decisions.origin : null });
     }
     const bearer = c.request.auth === 'bearer' ? bearerOf(ws, c.id) : undefined;
     const client = clientFor(conf, bearer);
@@ -185,6 +188,26 @@ export function createApp({
     const out = await fetchAttempt(run, c, { client, cfg: conf, now, limits, restart: req.body.restart === true });
     workspaces.putRun(ws, out);
     return res.json(out);
+  }));
+
+  // Privilege -> Elasticsearch: only what Privilege itself writes to its hosted Elasticsearch, read through the console (elasticlog), for
+  // the last N minutes. Mock: a recorded sample of the decision records measured on 2026-11-07. Read-only.
+  api.get('/privilege-logs', withWorkspace(async (ws, req, res) => {
+    const minutes = Number(req.query.minutes ?? 60);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10_080) return res.status(400).json({ error: 'bad_minutes', detail: 'minutes must be a whole number from 1 to 10080 (7 days)' });
+    if (mode === 'mock') return res.json({ source: 'mock', ...privilegeSample });
+    const conf = cfg();
+    if (!conf.ok) return res.status(409).json({ error: 'real_not_configured', detail: conf.problem });
+    if (!conf.decisions) return res.status(409).json({ error: 'console_not_configured', detail: 'Set PRIV_LOG_CONSOLE_URL and PRIV_LOG_CONSOLE_TENANT (and PRIV_LOG_CONSOLE_CA for the local console) to read Privilege\'s logs.' });
+    if (workspaces.state(ws).confirmed !== signature(conf)) return res.status(412).json({ error: 'confirm_required', detail: 'Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null, decisionsOrigin: conf.decisions.origin });
+    const toMs = now(); const fromMs = toMs - minutes * 60_000;
+    try {
+      const r = await readDecisions({ client: clientFor(conf), decisions: conf.decisions, fromMs, toMs, trace: newTrace() });
+      return res.json({ source: 'real', channel: 'Privilege -> Elasticsearch (Privilege hosted), read through the console', origin: conf.decisions.origin, from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString(),
+        truncated: r.truncated, entries: r.lines.map((l) => ({ index: l.index, kind: l.kind, at: l.ts ? new Date(l.ts).toISOString() : null, text: l.text })) });
+    } catch (e) {
+      return res.status(502).json({ error: e.code || 'source_unreachable', detail: e.detail || e.message });
+    }
   }));
 
   // Pure scoring of pasted lines (works in both modes). With a caseId in Real mode and an existing run, the lines are attached to that run.
