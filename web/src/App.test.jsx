@@ -147,6 +147,28 @@ describe("Mock mode", () => {
     expect(screen.getByTestId("run-no-credential")).not.toBeDisabled();
   });
 
+  it("Run page: every case card carries tags and the open tag panel filters the cards (empty sections hide); Clear restores", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    const page = await screen.findByTestId("run-page");
+    const panel = within(screen.getByTestId("case-tag-filter"));
+    const total = within(page).getAllByTestId(/^case-/).filter((el) => el.tagName === "ARTICLE").length;
+    expect(panel.getByTestId("tag-filter")).toBeInTheDocument(); // open from the start, not behind a toggle
+    expect(panel.getByTestId("tag-filter-count").textContent).toBe(`${total} of ${total} shown`);
+    expect(within(screen.getByTestId("case-fed-valid-token")).getAllByTestId("entry-tag").map((t) => t.getAttribute("data-tag"))).toEqual(expect.arrayContaining(["area:Federated identity", "expect:allowed", "credential:lab-minted token"]));
+    const chip = (id) => panel.getAllByTestId("filter-tag").find((b) => b.getAttribute("data-tag") === id);
+    await user.click(chip("area:Federated identity"));
+    expect(panel.getByTestId("tag-filter-count").textContent).toBe(`5 of ${total} shown`);
+    expect(screen.queryByTestId("case-mcp-allowed-key")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "MCP" })).toBeNull();
+    await user.click(chip("expect:allowed"));
+    expect(panel.getByTestId("tag-filter-count").textContent).toBe(`1 of ${total} shown`);
+    expect(screen.getByTestId("case-fed-valid-token")).toBeInTheDocument();
+    await user.click(panel.getByTestId("tag-filter-clear"));
+    expect(panel.getByTestId("tag-filter-count").textContent).toBe(`${total} of ${total} shown`);
+  });
+
   it("from an opened Trace, Back to Run and the browser Back button both return to the Run page with that case's Open trace focused", async () => {
     lab = await startLab();
     const user = userEvent.setup();

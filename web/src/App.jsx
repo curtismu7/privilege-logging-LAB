@@ -155,7 +155,7 @@ export default function App() {
     const el = focusReq.target === "title" ? titleRef.current : document.querySelector(`[data-testid="${focusReq.target}"]`);
     const at = document.activeElement;
     // only when focus was lost (body, nothing, a disabled or removed control): never take focus from where the user moved it
-    if (el && !el.disabled && (!at || at === document.body || at.disabled || !at.isConnected)) el.focus();
+    if (el && !el.disabled && (!at || at === document.body || at.disabled || !at.isConnected)) el.focus({ preventScroll: true });
     setFocusReq(null);
   }, [focusReq, running, nav]);
   // A single Run from the Run page confirms inside that case's card (no jump to the top of the page).
