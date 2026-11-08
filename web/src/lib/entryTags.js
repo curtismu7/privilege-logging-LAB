@@ -47,11 +47,12 @@ export function tagsFor(line, { method, kind, from, fields = [] } = {}) {
   const tags = [];
   const types = TYPES.filter(([, re]) => re.test(String(line))).map(([n]) => n);
   for (const n of types.length ? types : ['other']) tags.push({ group: 'type', value: n });
+  // Order = what an entry shows first (at most six pills, then "+N more"): type, match, identity, then the labels.
   if (MATCH[method]) tags.push({ group: 'match', value: MATCH[method] });
+  for (const i of identitiesOf(line)) tags.push({ group: 'identity', value: i });
   if (from) tags.push({ group: 'label', value: `from ${from}` });
   if (KIND[kind]) tags.push({ group: 'label', value: KIND[kind] });
   for (const f of fields) if (FIELD[f]) tags.push({ group: 'label', value: FIELD[f] });
-  for (const i of identitiesOf(line)) tags.push({ group: 'identity', value: i });
   return tags;
 }
 
