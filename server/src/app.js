@@ -173,21 +173,26 @@ export function createApp({
     if (!c) return res.status(404).json({ error: 'unknown_case' });
     const run = workspaces.getRun(ws, mode, c.id);
     if (!run) return res.status(409).json({ error: 'no_run', detail: 'Run the case first.' });
+    // The attempt awaits the log source. A newer Run of this case, or a Reset, can land meanwhile: store the result only if the stored
+    // run is still the one this attempt started from, so a late answer never brings back an old run (or a run Reset removed).
+    const source = run.source;
+    const store = (out) => {
+      const current = workspaces.getRun(ws, source, c.id);
+      if (current !== run) return current ? res.json(current) : res.status(409).json({ error: 'superseded', detail: 'The run was reset or replaced while its log entry was being fetched.' });
+      workspaces.putRun(ws, out);
+      return res.json(out);
+    };
     if (mode === 'mock') {
       if (run.scored) return res.json(run);
       if (mockDelayMs > 0) await sleep(mockDelayMs); // a short fixed simulated delay, so Mock shows the same two phases as Real
-      const out = mockFetch(run, c, capture);
-      workspaces.putRun(ws, out);
-      return res.json(out);
+      return store(mockFetch(run, c, capture));
     }
     const conf = cfg();
     if (!conf.ok) return res.status(409).json({ error: 'real_not_configured', detail: conf.problem });
     if (workspaces.state(ws).confirmed !== signature(conf)) return res.status(412).json({ error: 'confirm_required', detail: 'Confirm the origins first.' });
     const bearer = c.request.auth === 'bearer' ? bearerOf(ws, c.id) : undefined;
     const client = clientFor(conf, bearer);
-    const out = await fetchAttempt(run, c, { client, cfg: conf, now, limits, restart: req.body.restart === true });
-    workspaces.putRun(ws, out);
-    return res.json(out);
+    return store(await fetchAttempt(run, c, { client, cfg: conf, now, limits, restart: req.body.restart === true }));
   }));
 
   // Privilege -> Elasticsearch: only what Privilege itself writes to its hosted Elasticsearch, read through the console (elasticlog), for

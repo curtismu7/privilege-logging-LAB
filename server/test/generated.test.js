@@ -2,7 +2,7 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCapture } from '../src/capture.js';
 import { installNetguard } from '../src/netguard.js';
-import { GENERATED, authFor, badJwt } from '../src/mcpRunner.js';
+import { GENERATED, authFor, badJwt, rpcWithMarker } from '../src/mcpRunner.js';
 import { HAPPY_PATH } from '../src/lab.js';
 import { KEY, fakeGateway, get, k8sEnv, post, withServer } from './helpers.js';
 
@@ -65,4 +65,19 @@ test('Real: a generated-token case runs with nothing supplied and sends a JWT-sh
       assert.ok(!JSON.stringify(r.body).includes(KEY));
     }, { env: k8sEnv(gw, { base: 'http://127.0.0.1:9' }) });
   } finally { await gw.close(); }
+});
+
+test('rpcWithMarker: where the marker goes (no string argument, a short one replaced, a long one appended, tools/list _meta)', () => {
+  const M = 'audit-ab12cd34';
+  const byId = (id) => capture.cases.find((c) => c.id === id);
+  const none = rpcWithMarker(byId('mcp-tool-not-granted'), M);
+  assert.equal(none.where, 'params.arguments.lab_run'); assert.equal(none.rpc.params.arguments.lab_run, M);
+  const inj = byId('mcp-arg-injection'); const long = rpcWithMarker(inj, M);
+  assert.equal(long.where, 'params.arguments.city'); assert.equal(long.rpc.params.arguments.city, `${inj.request.arguments.city} ${M}`);
+  const mk = (city) => ({ id: 't', request: { method: 'tools/call', tool: 'get_weather', arguments: { city } } });
+  assert.equal(rpcWithMarker(mk('x'.repeat(20)), M).rpc.params.arguments.city, M, '20 characters or fewer: replaced');
+  assert.equal(rpcWithMarker(mk('x'.repeat(21)), M).rpc.params.arguments.city, `${'x'.repeat(21)} ${M}`, 'more than 20: appended');
+  assert.equal(rpcWithMarker(byId('mcp-allowed-user'), M).rpc.params.arguments.city, M);
+  const list = rpcWithMarker({ id: 'l', request: { method: 'tools/list' } }, M);
+  assert.equal(list.where, 'params._meta'); assert.equal(list.rpc.params._meta['lab/run'], M);
 });

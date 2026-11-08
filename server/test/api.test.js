@@ -2,6 +2,8 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCapture } from '../src/capture.js';
 import { installNetguard } from '../src/netguard.js';
+import { attachPasted, inferredFlags, toMarkdown } from '../src/lab.js';
+import { scoreLines } from '../src/scorer.js';
 import { KEY, NOENV, fakeGateway, fakeSearch, fakeK8s, gatewayLog, get, post, rawHttp, realEnv, recorder, runAndFetch, withServer } from './helpers.js';
 
 const capture = loadCapture();
@@ -380,6 +382,61 @@ test('runs are kept per source: a Real run never shows up in Mock views (and the
       assert.deepEqual(realRuns.map((r) => r.source), ['real']);
       const rows = (await json(await get(url, '/api/scorecard'))).body.rows;
       assert.equal(rows.filter((r) => r.ran).length, 1);
+    }, realOpts(gw, search));
+  } finally { await gw.close(); await search.close(); }
+});
+
+test('toMarkdown: a pipe in a title or note is escaped (the row keeps 7 columns) and an inferred field says so IN its row', () => {
+  const rows = [{ id: 'x', group: 'G|H', title: 'a|b', score: { user: 'met', agent: 'partial', tool: 'met', decision: 'missing' }, notes: { user: 'one | two' }, inferred: { user: false, agent: true, tool: false, decision: false } }];
+  const md = toMarkdown(rows, { source: 'real', capturedOn: null, requirement: ['a. user'] });
+  const row = md.split('\n').find((l) => l.startsWith('| a'));
+  assert.ok(row.includes('a\\|b') && row.includes('G\\|H') && row.includes('one \\| two'), row);
+  assert.equal(row.replace(/\\\|/g, '').split('|').length, 9, row);
+  assert.match(row, /\| met \| partial \(inferred\) \| met \| missing \|/);
+});
+
+test('inferredFlags: only evidence at the winning level counts; a field with no evidence is not inferred', () => {
+  // the marker line gives agent only "partial"; the window neighbour gives the "met" that wins
+  const lines = ['level=info agent=true msg="payload audit-ab12cd34"', 'Access token found for user: u-live, client: audit-test'];
+  const r = scoreLines(lines, { na: [] });
+  assert.equal(r.score.agent, 'met');
+  const f = inferredFlags(r, [{ source: 'k8s-pod', lines, methods: ['marker', 'window'] }]);
+  assert.equal(f.agent, true, 'met only from a window line is inferred, whatever weaker evidence the marker line adds');
+  assert.equal(f.user, true);
+  assert.equal(f.tool, false, 'no evidence: nothing to infer');
+  assert.equal(inferredFlags(r, [{ source: 'k8s-pod', lines, methods: ['window', 'marker'] }]).agent, false);
+});
+
+test('attachPasted re-derives the inferred flags: pasted lines that back a field clear its (inferred)', () => {
+  const c = capture.cases.find((x) => x.id === 'mcp-allowed-key');
+  const win = ['Access token found for user: u-live, client: audit-test'];
+  const r0 = scoreLines(win, { na: [] });
+  const run = { source: 'real', caseId: c.id, logged: [{ source: 'k8s-pod', lines: win, methods: ['window'] }], score: r0.score, scoreInferred: inferredFlags(r0, [{ lines: win, methods: ['window'] }]) };
+  assert.equal(run.scoreInferred.user, true);
+  const out = attachPasted(run, c, ['Access token found for user: u-live, client: audit-test', 'MCP call detected for method tools with target: get_weather']);
+  assert.equal(out.scoreInferred.user, false); assert.equal(out.scoreInferred.agent, false); assert.equal(out.scoreInferred.tool, false);
+});
+
+test('Mock: the fetched result is stored (the runs list and the scorecard see the scored run)', async () => {
+  await withServer(async (url) => {
+    await post(url, '/api/mode', { source: 'mock' });
+    const { final } = await runAndFetch(url, 'mcp-allowed-key');
+    assert.equal(final.scored, true);
+    const runs = (await json(await get(url, '/api/runs'))).body.runs;
+    assert.equal(runs.length, 1); assert.equal(runs[0].scored, true); assert.equal(runs[0].retrieval.state, 'found');
+  });
+});
+
+test('Real search: a bearer token inside a search hit is redacted before it is shown or scored', async () => {
+  const gw = await fakeGateway();
+  const search = await fakeSearch({ events: [{ '@timestamp': nowIso(1000), message: 'debug Authorization: Bearer hitsecrettoken987654 for user: u-live, client: audit-test' }] });
+  try {
+    await withServer(async (url) => {
+      await confirm(url, gw);
+      const { final } = await runAndFetch(url, 'mcp-allowed-key');
+      assert.equal(final.retrieval.state, 'found');
+      assert.ok(!JSON.stringify(final).includes('hitsecrettoken987654'), 'the token never appears');
+      assert.ok(final.logged.find((l) => l.source === 'search').lines.some((l) => l.includes('Bearer ***')));
     }, realOpts(gw, search));
   } finally { await gw.close(); await search.close(); }
 });
