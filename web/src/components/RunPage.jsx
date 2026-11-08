@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Busy from "./Busy";
+import FedSetup from "./FedSetup";
 import { Chip, LevelChip } from "./Chips";
 
 const summary = (r) => [r.method, r.tool, r.app && `app ${r.app}`, r.model && `model ${r.model}`].filter(Boolean).join(" · ");
@@ -56,6 +57,7 @@ export default function RunPage({ cases, runs, info, running, busy = {}, onRun, 
                   {mockOnlyBlock && <p className="muted" data-testid={`mockonly-${c.id}`}>{MOCK_ONLY_NOTE}</p>}
                   {real && c.realRunnable && /signed-in/i.test(c.identity) && <p className="muted" data-testid={`ident-${c.id}`}>Real sends this with the agent key (this tool has no user sign-in), so the identity differs from the measured case.</p>}
                   {real && !c.realRunnable && <p className="muted" data-testid={`note-${c.id}`}>Not runnable in Real: {c.realNote}</p>}
+                  {real && c.mintsToken && <FedSetup bearerConfigured={c.bearerConfigured} />}
                   {real && c.needsBearer && <BearerField c={c} onBearer={onBearer} />}
                   {real && c.consoleAction && (
                     <div className="row">

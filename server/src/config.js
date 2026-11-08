@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { isLoopbackHost, isPrivateAddress } from './safety.js';
 
-export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER', 'PRIV_LOG_CONSOLE_URL', 'PRIV_LOG_CONSOLE_TENANT', 'PRIV_LOG_CONSOLE_CA', 'PRIV_LOG_BRIDGE_ES_URL', 'PRIV_LOG_BRIDGE_ES_APIKEY'];
+export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER', 'PRIV_LOG_CONSOLE_URL', 'PRIV_LOG_CONSOLE_TENANT', 'PRIV_LOG_CONSOLE_CA', 'PRIV_LOG_BRIDGE_ES_URL', 'PRIV_LOG_BRIDGE_ES_APIKEY', 'PRIV_LOG_FED_SIGNING_SEED', 'PRIV_LOG_FED_AUDIENCE'];
 export const DEFAULT_K8S_PROXY = 'http://127.0.0.1:8001';
 export const DEFAULT_K8S_CONTAINER = 'log-tailer';
 // A Kubernetes object name (RFC 1123 subdomain) or a label selector such as app=privilege-gateway,tier=gw.
@@ -118,6 +118,20 @@ export function realConfig(env = process.env, opts) {
 
 // The bearer the owner set for a case in the environment or settings file, or undefined. Never returned by an API.
 export const bearerFromSettings = (caseId, env = process.env, opts) => readSettings(env, opts)[`PRIV_LOG_BEARER_${String(caseId).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`];
+
+// The lab's own workload-token issuer (fedIssuer.js) for the "Valid workload token" case: PRIV_LOG_FED_SIGNING_SEED (write-only, never
+// returned) and PRIV_LOG_FED_AUDIENCE (the Audience the Privilege console shows on the Federated Identity). Returns
+// { seed, audience, problem }: problem is null only when both are set and usable.
+export function fedConfig(env = process.env, opts) {
+  const s = readSettings(env, opts);
+  const seed = s.PRIV_LOG_FED_SIGNING_SEED || null; const audience = s.PRIV_LOG_FED_AUDIENCE || null;
+  let problem = null;
+  if (!seed) problem = 'PRIV_LOG_FED_SIGNING_SEED is not set (run npm run fed-key)';
+  else if (!/^[0-9a-f]{64}$/i.test(seed)) problem = 'PRIV_LOG_FED_SIGNING_SEED must be 64 hex characters (run npm run fed-key for a new one)';
+  else if (!audience) problem = 'PRIV_LOG_FED_AUDIENCE is not set (copy the Audience from the Federated Identity in the Privilege console)';
+  else if (audience.length > 512 || /[\s\u0000-\u001f]/.test(audience)) problem = 'PRIV_LOG_FED_AUDIENCE must be up to 512 characters with no spaces';
+  return { seed, audience, problem };
+}
 
 export const realAvailableFrom = (env = process.env, opts) => realConfig(env, opts).ok;
 export const realProblemFrom = (env = process.env, opts) => { const c = realConfig(env, opts); return c.ok ? null : c.problem; };

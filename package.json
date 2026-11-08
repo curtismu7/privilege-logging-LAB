@@ -23,7 +23,8 @@
     "diagrams": "node scripts/build-diagrams.mjs",
     "content-pack": "node scripts/build-content-pack.mjs && node scripts/validate-content-pack.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "bridge": "node scripts/bridge.mjs"
+    "bridge": "node scripts/bridge.mjs",
+    "fed-key": "node scripts/fed-key.mjs"
   },
   "devDependencies": {
     "ajv": "^8.20.0",

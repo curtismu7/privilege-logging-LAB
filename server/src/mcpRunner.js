@@ -49,7 +49,7 @@ export function authFor(c, key, bearer) {
   if (c.id === 'unknown-key') return `Bearer lab-unknown-${randomBytes(6).toString('hex')}`;
   if (c.id === 'malformed-token') return 'Bearer ..not.a.token..';
   if (c.request.auth === 'bearer') {
-    if (!bearer) throw new RealError('bearer_needed', `This case sends a credential only you have (${(c.needs || []).join(', ') || 'a bearer'}). Paste it in the write-only field on this case, or set PRIV_LOG_BEARER_${bearerEnvName(c.id)}.`, 409);
+    if (!bearer) throw new RealError('bearer_needed', `This case sends a credential only you have (${(c.needs || []).join(', ') || 'a bearer'}). Paste it in the write-only field on this case, or set PRIV_LOG_BEARER_${bearerEnvName(c.id)}.${c.id === 'fed-valid-token' ? ' Or let the lab mint one: follow "Set up the lab as a token issuer" on this case (PRIV_LOG_FED_SIGNING_SEED and PRIV_LOG_FED_AUDIENCE).' : ''}`, 409);
     return `Bearer ${bearer}`;
   }
   return `Bearer ${key}`;

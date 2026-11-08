@@ -21,6 +21,8 @@ services:
       PRIV_LOG_AGENT_KEY: ${PRIV_LOG_AGENT_KEY:-}
       PRIV_LOG_SEARCH_URL: ${PRIV_LOG_SEARCH_URL:-}
       PRIV_LOG_SEARCH_INDEX: ${PRIV_LOG_SEARCH_INDEX:-}
+      PRIV_LOG_FED_SIGNING_SEED: ${PRIV_LOG_FED_SIGNING_SEED:-}
+      PRIV_LOG_FED_AUDIENCE: ${PRIV_LOG_FED_AUDIENCE:-}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
