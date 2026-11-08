@@ -1,8 +1,9 @@
 // The scorer: a pure function. Given the log lines of ONE call it decides, for each field of the audit requirement
 // (a. user, b. agent, c. tool, d. authorization decision), whether the lines carry it:
-//   met      a line names the value (a user id, a named agent or key, the tool, an allow/deny verdict);
+//   met      a line names the value (a user id, a named agent or key, the tool, an authorization allow/deny verdict);
 //   partial  a line carries it weakly or by inference (an app-level permission line, an agent=true flag with no name,
-//            an OAuth client id that names a client not an agent, a list that names removed tools but not the called one);
+//            an OAuth client id that names a client not an agent, a list that names removed tools but not the called one,
+//            a guardrail block, which is a guardrail verdict and not an authorization policy decision);
 //   missing  nothing in the lines says it.
 // `na` (not applicable) is never decided from lines: the caller passes ctx.na = ['tool', ...] for fields the use case cannot have.
 //
@@ -49,7 +50,7 @@ function factsOf(line) {
     if (EMPTY.has(v.toLowerCase()) || v.toLowerCase() === 'false') return;
     if (v.toLowerCase() === 'true') add('agent', 'partial', `${why}: a flag, no agent name`, start, end);
     else if (looksLikeOAuthClient(v)) add('agent', 'partial', `${why}: names the OAuth client, not an agent`, start, end);
-    else add('agent', 'met', `${why}: names the agent or key`, start, end);
+    else add('agent', 'met', `${why}: a named client, taken as the agent or key (a log line cannot prove the client is an agent)`, start, end);
   };
 
   // 1. Known gateway line shapes (text markers).
@@ -74,8 +75,12 @@ function factsOf(line) {
     const a = line.indexOf('(agent=', e);
     if (a >= 0) { const as = a + '(agent='.length; const ae = line.indexOf(')', as); const end = ae < 0 ? as : ae; agentValue(line.slice(as, end), as, end, 'denial line flags agent'); }
   }
+  // "Access Denied" is a policy verdict only on a gateway line ([mcpgw]); the same words anywhere else say a refusal happened, not which policy decided.
   i = at('Access Denied');
-  if (i >= 0) add('decision', 'met', 'access denied', i, i + 'Access Denied'.length);
+  if (i >= 0) {
+    if (line.includes('[mcpgw]')) add('decision', 'met', 'access denied on a gateway policy line', i, i + 'Access Denied'.length);
+    else add('decision', 'partial', 'access denied text outside a gateway policy line: a refusal, not a recorded policy decision', i, i + 'Access Denied'.length);
+  }
   i = at('MCP call detected for method tools with target: ');
   if (i >= 0) { const s = i + 'MCP call detected for method tools with target: '.length; const e = take(s); if (e > s) add('tool', 'met', 'MCP call line names the tool', s, e); }
   for (const phrase of ['Removing unauthorized tool from MCP response: ', 'Removing unauthorized prompt from MCP response: ']) {
@@ -87,7 +92,7 @@ function factsOf(line) {
     }
   }
   i = at('aiguard: blocked');
-  if (i >= 0) add('decision', 'met', 'guardrail block (a guardrail finding, not an authorization decision)', i, i + 'aiguard: blocked'.length);
+  if (i >= 0) add('decision', 'partial', 'guardrail verdict, no authorization decision line', i, i + 'aiguard: blocked'.length);
   i = at('auth rejected');
   if (i >= 0) add('decision', 'partial', 'authentication refusal: says the call was rejected, not which policy decided', i, i + 'auth rejected'.length);
   i = at('aiintent:');
@@ -130,7 +135,12 @@ function factsOf(line) {
       const d = clean(v).toLowerCase();
       if (EMPTY.has(d)) return;
       add('decision', /^(allow|allowed|deny|denied|permit|permitted|forbid|forbidden|block|blocked|true|false|permit_|deny_|hitl|approval_required|held)/.test(d) ? 'met' : 'partial', why, start, end);
-    } else if (key === 'event' && /(blocked|denied|rejected|forbidden)/i.test(v.slice(0, 80))) add('decision', 'met', `${via} event ${v.slice(0, 40)}: a block event`, start, end);
+    } else if (key === 'event') {
+      // A denied/forbidden event is a policy verdict; a blocked/rejected event (a guardrail block, a credential refusal) says the call was stopped, not which authorization policy decided.
+      const ev = v.slice(0, 80);
+      if (/(denied|forbidden)/i.test(ev)) add('decision', 'met', `${via} event ${v.slice(0, 40)}: a denial event`, start, end);
+      else if (/(blocked|rejected)/i.test(ev)) add('decision', 'partial', `${via} event ${v.slice(0, 40)}: a block event, not an authorization decision`, start, end);
+    }
   }
 
   // Explicit stack, depth <= 5, at most 400 nodes: a hostile deeply nested or huge record cannot blow the stack or the time.

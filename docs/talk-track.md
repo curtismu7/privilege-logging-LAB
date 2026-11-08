@@ -28,11 +28,11 @@ Met means a line names it. Partial means it is only implied or only half there, 
 
 ## 7. Say the gaps out loud
 
-Rejected calls name nobody. Aggregate routes log almost nothing for the member calls. The LLM route logged nothing we could find. No allowed call has an explicit allow line. Naming these is what makes the rest credible.
+The 401 rejections and the aggregate and LLM refusals name nobody; the MCP policy denials name the user and agent=true but not the tool. Aggregate routes log almost nothing for the member calls. The LLM route logged nothing we could find. A2A was measured on one call that failed because the backend was down, so a successful A2A call is not measured. No allowed call has an explicit allow line. Naming these is what makes the rest credible.
 
 ## 8. Where it is logged
 
-There are five places a record could land. Only the gateway pod log carried per-call lines, the SIEM index held console changes only, and the shipper to OpenSearch has not delivered since late October. The response header is described but was not captured, so we say UNVERIFIED.
+There are five places a record could land. Only the gateway pod log carried per-call lines, the SIEM index held console changes only, and the shipper to OpenSearch has not delivered since late October. The response header was not captured and the console was not read for these cases, so both are UNVERIFIED.
 
 ## 9. Real mode and the paste box
 
@@ -45,12 +45,13 @@ Offer the scorecard as the current measured state, not a promise. Anything marke
 ## Facts and their status
 
 - **measured**: 17 use cases were driven through the gateway on 2026-11-07 and what each one logged was read back. Sources: hosted Privilege gateway pod log, Elasticsearch ping-siem-events, OpenSearch gateway-events.
-- **measured**: User: met in 9 of 17 cases, partial in 0, missing in 7, not applicable in 1.
-- **measured**: Agent: met in 4 of 17 cases, partial in 5, missing in 7, not applicable in 1.
-- **measured**: Tool: met in 3 of 17 cases, partial in 1, missing in 7, not applicable in 6.
-- **measured**: Decision: met in 3 of 17 cases, partial in 9, missing in 5.
-- **measured**: No case showed a per-call allow line. An allowed call is only implied by an app-level permission line; a refused call has an explicit denial line.
-- **measured**: The Elasticsearch ping-siem-events index held console REST API changes only, and zero events for any of these cases. The OpenSearch gateway-events index receives LLM, AI Guard and A2A events only, and its newest event was dated 2026-10-26.
+- **inferred**: User: met in 9 of 17 cases, partial in 0, missing in 7, not applicable in 1. A count of our met/partial/missing scoring of the recorded log, not a number the gateway reports.
+- **inferred**: Agent: met in 4 of 17 cases, partial in 5, missing in 7, not applicable in 1. A count of our met/partial/missing scoring of the recorded log, not a number the gateway reports.
+- **inferred**: Tool: met in 3 of 17 cases, partial in 0, missing in 4, not applicable in 10. A count of our met/partial/missing scoring of the recorded log, not a number the gateway reports.
+- **inferred**: Decision: met in 2 of 17 cases, partial in 10, missing in 5. A count of our met/partial/missing scoring of the recorded log, not a number the gateway reports. A guardrail block counts as partial: it is a guardrail verdict, not an authorization policy decision.
+- **measured**: For 5 of 17 cases (mcp-tool-not-granted, mcp-list-filtered, mcp-arg-injection, aggregate-allowed, a2a-call) the recorded level of 8 fields differs from the scorer run on the sample lines kept in the capture; each such field says so in its note.
+- **measured**: No case showed a per-call allow line. An allowed call is only implied by an app-level permission line. Of the 9 refused calls (HTTP 4xx), 2 have an explicit MCP policy-denial line, 1 an AI Guard block line, 3 only an auth-rejected line (a credential refusal, not a policy decision), and 3 (Aggregate and LLM) logged nothing in the gateway pod log.
+- **measured**: The Elasticsearch ping-siem-events index held console REST API changes only, and zero events in the 16 of 17 cases it was read for (not read for llm-injection). The OpenSearch gateway-events index receives LLM, AI Guard and A2A events only, its newest event was dated 2026-10-26, and it was read for 3 cases only (mcp-list-guard-blocked, llm-allowed, llm-injection).
 - **measured**: The LLM route logged nothing in the gateway pod log for the allowed, denied-model and injection cases, so user, agent and decision are missing for all three.
 - **UNVERIFIED**: 17 more use cases (Keys, Federated identity, Approvals, Registry lifecycle) are listed but have not been measured: there is no recording and no score for them. They run only in Real mode, and the Scorecard says "not measured" until a Real run produces log lines.
 - **inferred**: In Real mode each run embeds a unique marker (audit-<runid>) in the request where the case allows it, and the log entry is found by that marker first. Lines next to the marker, and calls that never log their payload (a rejected 401 logs only app, method, path and caller address), are matched by a tight time window and the app path. A time-window match is labelled inferred: other traffic in the window can be included, and a clock skew of more than a second between the lab and the log source breaks it.

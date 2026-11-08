@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Honesty fixes: a guardrail block scores decision partial (not an authorization decision); `Access Denied` counts as met only on a gateway line; every tools/list case is n/a for tool; the console sink is UNVERIFIED (never read); score notes disclose where the recorded level differs from the scorer on the sample lines; the "(no guardrail line)" annotation is no longer stored as a log line; per-field tallies are labelled inferred; the refusal and sink facts are counted from the capture; the Real banner names the kubectl proxy pod-log source.
 - Privilege -> Elasticsearch tab: only what Privilege itself logged (its hosted indices, read through the console's elasticlog API), for a time range, with runtime/console and index filters. Mock shows the five decision records recorded on 2026-11-07.
 - Privilege logs as a Real log source on every run (PRIV_LOG_CONSOLE_URL, PRIV_LOG_CONSOLE_TENANT, PRIV_LOG_CONSOLE_CA), matched by time window and app.
 - Every entry says where it came from (channel badge: gateway pod log vs Privilege -> Elasticsearch vs other) and what kind it is (runtime or console event).
@@ -11,6 +12,6 @@
 
 ## 0.1.0
 
-- First version. Mock replays the 17 use cases measured on 2026-11-07 (5 log sinks); Real sends them to a configured gateway over MCP streamable HTTP and reads the log back from a search endpoint or from pasted lines.
+- First version. Mock replays the 17 use cases measured on 2026-11-07 (3 of 5 log sinks read; the response header and the console were not, UNVERIFIED); Real sends them to a configured gateway over MCP streamable HTTP and reads the log back from a search endpoint or from pasted lines.
 - Scorer: a pure function that scores user, agent, tool and decision from log lines (logrus text and JSON records); pinned against the capture with five documented differences.
 - Pages: Run, Trace, Scorecard (Markdown export), Where it's logged, Diagram (one per flow, diagram-studio/1 data), Talk track. Presenter mode, theme picker, Reset.

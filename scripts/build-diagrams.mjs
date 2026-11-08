@@ -43,10 +43,12 @@ export function buildDiagram(flow, capture) {
     const entries = cases.flatMap((c) => c.logged.filter((l) => l.source === s.id));
     const n = entries.reduce((sum, l) => sum + l.lines.length, 0);
     const notes = [...new Set(entries.map((l) => l.note).filter(Boolean))].join(' ');
+    // A search that found nothing is not proof that nothing was logged; drop bare "Nothing." notes so the sentence does not repeat.
+    const noneNotes = [...new Set(entries.map((l) => l.note).filter((t) => t && !/^Nothing( found)?\.?$/.test(t.trim())))].join(' ');
     const unread = s.unverified || entries.length === 0; // never read back for these cases: say so, do not claim "nothing"
     const none = !unread && n === 0;
     const label = unread ? 'not read back' : none ? 'nothing found' : `${n} line${n === 1 ? '' : 's'}`;
-    const what = unread ? `${s.summary} No reading of this sink was recorded for the ${flow.group} cases (UNVERIFIED).` : none ? `Nothing was logged here for this flow. ${notes || s.summary}` : `${n} line(s) across ${entries.length} case(s). ${notes}`;
+    const what = unread ? `${s.summary} No reading of this sink was recorded for the ${flow.group} cases (UNVERIFIED).` : none ? `No line was found here for this flow. ${noneNotes || s.summary}` : `${n} line(s) across ${entries.length} case(s). ${notes}`;
     step('gateway', s.id, label, `${s.name}: ${unread ? 'not read back' : none ? 'nothing' : `${n} line${n === 1 ? '' : 's'}`}`, what, none || unread);
   }
   return {

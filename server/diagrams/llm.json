@@ -64,7 +64,7 @@
     {
       "id": "console",
       "label": "Console Activity Log and Agent Insights",
-      "group": "sink",
+      "group": "unverified",
       "x": 460,
       "y": 330
     },
@@ -142,7 +142,7 @@
     },
     {
       "title": "Gateway pod log (cyonproxy.log): nothing",
-      "what": "Nothing was logged here for this flow. No LLM request line found in the gateway pod log or any other pod. The shipper design expects one per call. Nothing found. Nothing found in the pod log on 2026-11-07.",
+      "what": "No line was found here for this flow. No LLM request line found in the gateway pod log or any other pod. The shipper design expects one per call. Nothing found in the pod log on 2026-11-07.",
       "edges": [
         2
       ]
@@ -156,21 +156,21 @@
     },
     {
       "title": "Console Activity Log and Agent Insights: not read back",
-      "what": "Local-proxy rows lack tool, decision and agent. Agent Insights shows AI Guard verdicts for LLM routes. Not re-checked for the cases here. No reading of this sink was recorded for the LLM cases (UNVERIFIED).",
+      "what": "Earlier observations: local-proxy rows lack tool, decision and agent; Agent Insights shows AI Guard verdicts for LLM routes. Not read for any case here, so UNVERIFIED. No reading of this sink was recorded for the LLM cases (UNVERIFIED).",
       "edges": [
         4
       ]
     },
     {
       "title": "Elasticsearch ping-siem-events: nothing",
-      "what": "Nothing was logged here for this flow. Nothing.",
+      "what": "No line was found here for this flow. Console REST API changes only (1,400 events). Zero events in every case it was read for (16 of 17; not read for llm-injection).",
       "edges": [
         5
       ]
     },
     {
       "title": "OpenSearch gateway-events: nothing",
-      "what": "Nothing was logged here for this flow. No new LLM events since 2026-10-26. Earlier events (llm_request_blocked) exist up to 2026-10-26.",
+      "what": "No line was found here for this flow. No new LLM events since 2026-10-26. Earlier events (llm_request_blocked) exist up to 2026-10-26.",
       "edges": [
         6
       ]

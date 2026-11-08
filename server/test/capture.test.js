@@ -19,6 +19,11 @@ test('the response sink is marked unverified (it was not captured)', () => {
   assert.equal(loadCapture().sinks.find((s) => s.id === 'response').unverified, true);
 });
 
+test('a sink that no case was read for is marked unverified, so no page reads "held nothing" for it', () => {
+  const d = loadCapture();
+  for (const s of d.sinks) if (!d.cases.some((c) => c.logged.some((l) => l.source === s.id))) assert.equal(s.unverified, true, s.id);
+});
+
 const bad = [
   ['wrong schema', (d) => { d.schema = 'x'; }, /schema must be/],
   ['bad date', (d) => { d.capturedOn = 'yesterday'; }, /capturedOn/],
