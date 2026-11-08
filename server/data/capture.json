@@ -103,7 +103,7 @@
     {
      "source": "gateway-log",
      "lines": [
-      "Access token found for user: <user-uuid>, client: audit-test",
+      "Access token found for user: <user-uuid>, client: lab-agent-key",
       "Principal {User <user-uuid>} has policy based capabilities for {Application demo-mcp-app}",
       "MCP call detected for method tools with target: get_weather"
      ],
@@ -144,7 +144,7 @@
     {
      "source": "gateway-log",
      "lines": [
-      "Access token found for user: <user-uuid>, client: audit-test",
+      "Access token found for user: <user-uuid>, client: lab-agent-key",
       "[mcpgw] policy denied <user-uuid> access to demo-mcp-app (agent=true): Access Denied for "
      ],
      "note": "The denial names the user, the app and agent=true. It does not name the tool."
@@ -258,8 +258,8 @@
     {
      "source": "gateway-log",
      "lines": [
-      "aiguard: blocked mcp response client=audit-test category=malicious_content",
-      "{\"Event\":\"mcp_response_blocked\",\"Client\":\"audit-test\",\"User\":\"<user-uuid>\",\"Category\":\"malicious_content\",\"Direction\":\"response\",\"TopScore\":1,\"OWASPIDs\":[\"LLM01\"],\"MITREATLASIDs\":[\"AML.T0051\"],\"NISTAIRMFIDs\":[\"MAP-2.3\"],\"RequestID\":\"<id>\"}"
+      "aiguard: blocked mcp response client=lab-agent-key category=malicious_content",
+      "{\"Event\":\"mcp_response_blocked\",\"Client\":\"lab-agent-key\",\"User\":\"<user-uuid>\",\"Category\":\"malicious_content\",\"Direction\":\"response\",\"TopScore\":1,\"OWASPIDs\":[\"LLM01\"],\"MITREATLASIDs\":[\"AML.T0051\"],\"NISTAIRMFIDs\":[\"MAP-2.3\"],\"RequestID\":\"<id>\"}"
      ],
      "note": "The only structured decision record: user, client, verdict and framework mappings. It records a guardrail finding, not an authorization decision."
     },
@@ -450,7 +450,7 @@
     {
      "source": "gateway-log",
      "lines": [
-      "Access token found for user: <user-uuid>, client: audit-test",
+      "Access token found for user: <user-uuid>, client: lab-agent-key",
       "Principal {User <user-uuid>} has policy based capabilities for {Application aggregate-door}"
      ],
      "note": "Almost nothing logged for the member calls."

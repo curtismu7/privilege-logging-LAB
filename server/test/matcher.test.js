@@ -116,7 +116,7 @@ test('redactLine masks bearer tokens, JWTs, key/secret/password values; ordinary
   assert.match(redactLine('token eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1In0.c2ln here'), /\*\*\*jwt\*\*\*/);
   assert.equal(redactLine('api_key=placeholdervalue ok'), 'api_key=*** ok');
   assert.equal(redactLine('{"client_secret":"hunter22","user":"u-1"}'), '{"client_secret":"***","user":"u-1"}');
-  assert.equal(redactLine('Access token found for user: u-9, client: audit-test'), 'Access token found for user: u-9, client: audit-test');
+  assert.equal(redactLine('Access token found for user: u-9, client: lab-agent-key'), 'Access token found for user: u-9, client: lab-agent-key');
   redactLine(`Bearer ${'a'.repeat(4000)}`); redactLine(`${'password '.repeat(500)}`); redactLine(`${'eyJ'.repeat(1300)}`);
   assert.ok(Date.now() - t < 1000);
 });

@@ -45,7 +45,7 @@ describe("Mock mode", () => {
     const lines = await screen.findByTestId("lines-gateway-log", {}, { timeout: 5000 });
     const marked = [...lines.querySelectorAll("mark")].map((m) => [m.getAttribute("data-field"), m.textContent]);
     expect(marked).toContainEqual(["tool", "get_weather"]);
-    expect(marked).toContainEqual(["agent", "audit-test"]);
+    expect(marked).toContainEqual(["agent", "lab-agent-key"]);
     expect(marked.some(([f]) => f === "decision")).toBe(true);
     expect(screen.getByTestId("trace-source").textContent).toMatch(/MOCK replay of 2026-11-07/);
     expect(screen.getByTestId("score").textContent).toMatch(/partial/);
@@ -84,7 +84,7 @@ describe("Mock mode", () => {
     await user.click(screen.getByTestId("nav-trace"));
     const box = await screen.findByTestId("paste-box");
     await user.click(box);
-    await user.paste('Access token found for user: <img src=x onerror=alert(1)>, client: audit-test\nMCP call detected for method tools with target: t\u202egnp.\nnoise \u202e rtl text');
+    await user.paste('Access token found for user: <img src=x onerror=alert(1)>, client: lab-agent-key\nMCP call detected for method tools with target: t\u202egnp.\nnoise \u202e rtl text');
     await user.click(screen.getByTestId("paste-score"));
     const res = await screen.findByTestId("paste-result");
     expect(res.querySelector("img")).toBeNull();
@@ -198,7 +198,7 @@ describe("Mock mode", () => {
     const sink = await screen.findByTestId("lines-gateway-log", {}, { timeout: 5000 });
     const items = () => within(sink).queryAllByTestId("entry-item");
     expect(items()).toHaveLength(3);
-    expect(within(items()[0]).getAllByTestId("entry-tag").map((t) => t.getAttribute("data-tag"))).toEqual(expect.arrayContaining(["type:auth", "match:recorded sample", "identity:key audit-test"]));
+    expect(within(items()[0]).getAllByTestId("entry-tag").map((t) => t.getAttribute("data-tag"))).toEqual(expect.arrayContaining(["type:auth", "match:recorded sample", "identity:key lab-agent-key"]));
     const first = within(items()[0]);
     expect(first.getAllByTestId("entry-tag")).toHaveLength(6); // at most six pills, then "+N more", like tags on a shelf box
     await user.click(first.getByTestId("entry-tags-more"));
@@ -216,8 +216,8 @@ describe("Mock mode", () => {
     expect(within(items()[0]).getAllByTestId("entry-tag").find((b) => b.getAttribute("data-tag") === "type:auth")).toHaveAttribute("aria-pressed", "true");
     await user.click(filterTag("type:policy"));
     expect(items()).toHaveLength(2);
-    expect(filterTag("identity:key audit-test")).not.toBeDisabled();
-    await user.click(filterTag("identity:key audit-test"));
+    expect(filterTag("identity:key lab-agent-key")).not.toBeDisabled();
+    await user.click(filterTag("identity:key lab-agent-key"));
     expect(items()).toHaveLength(1);
     expect(filterTag("type:policy").textContent).toBe("policy 0"); // with the key picked, policy alone would leave nothing
     await user.click(within(sink).getByTestId("tag-filter-clear"));
@@ -331,7 +331,7 @@ describe("Real mode (against a fake gateway)", () => {
       expect(screen.getByTestId("retrieval").textContent).toMatch(/Paste the gateway log lines/);
       expect(document.body.textContent).not.toContain(KEY);
       await user.click(screen.getByTestId("paste-box"));
-      await user.paste("Access token found for user: u1, client: audit-test\nMCP call detected for method tools with target: get_weather");
+      await user.paste("Access token found for user: u1, client: lab-agent-key\nMCP call detected for method tools with target: get_weather");
       await user.click(screen.getByTestId("paste-score"));
       await screen.findByTestId("paste-result");
       await waitFor(() => expect(screen.getByTestId("score")).toBeInTheDocument());
@@ -377,7 +377,7 @@ const fakeProxy = (gw, ctl = { mode: "ok", delayMs: 0 }) => new Promise((resolve
     const lines = ctl.mode === "empty" ? [] : gw.requests.flatMap((r) => {
       const m = JSON.parse(r.body); if (m.method !== "tools/call") return [];
       const iso = new Date(r.at).toISOString();
-      return [`${iso} time="${iso}" level=info msg="Access token found for user: u-live, client: audit-test"`, `${iso} time="${iso}" level=info msg="MCP call detected for method tools with target: ${m.params.name}"`, `${iso} time="${iso}" level=info msg="incoming request: ${r.body.replace(/"/g, "'")}"`];
+      return [`${iso} time="${iso}" level=info msg="Access token found for user: u-live, client: lab-agent-key"`, `${iso} time="${iso}" level=info msg="MCP call detected for method tools with target: ${m.params.name}"`, `${iso} time="${iso}" level=info msg="incoming request: ${r.body.replace(/"/g, "'")}"`];
     });
     res.writeHead(200, { "content-type": "text/plain" }); res.end(lines.join("\n"));
   });

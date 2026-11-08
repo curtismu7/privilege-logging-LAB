@@ -77,21 +77,21 @@ test('mutation: removing the line that names the tool drops tool from met', () =
 });
 
 test('mutation: blanking the user id drops user; an empty or anonymous user is not evidence', () => {
-  assert.equal(scoreLines(['Access token found for user: abc-123, client: audit-test']).score.user, 'met');
-  assert.equal(scoreLines(['Access token found for user: , client: audit-test']).score.user, 'missing');
+  assert.equal(scoreLines(['Access token found for user: abc-123, client: lab-agent-key']).score.user, 'met');
+  assert.equal(scoreLines(['Access token found for user: , client: lab-agent-key']).score.user, 'missing');
   assert.equal(scoreLines(['{"User":"anonymous"}']).score.user, 'missing');
   assert.equal(scoreLines(['{"User":""}']).score.user, 'missing');
 });
 
 test('agent: a named key is met, an OAuth client id or a bare agent=true is partial, nothing is missing', () => {
-  assert.equal(scoreLines(['Access token found for user: u1, client: audit-test']).score.agent, 'met');
+  assert.equal(scoreLines(['Access token found for user: u1, client: lab-agent-key']).score.agent, 'met');
   assert.equal(scoreLines(['Access token found for user: u1, client: 123e4567-e89b-12d3-a456-426614174000']).score.agent, 'partial');
   assert.equal(scoreLines(['Access token found for user: u1, client: <oauth-client-id>']).score.agent, 'partial');
   assert.equal(scoreLines(['[mcpgw] policy denied u1 access to app (agent=true): Access Denied for ']).score.agent, 'partial');
   assert.equal(scoreLines(['[mcpgw] policy denied u1 access to app (agent=false): Access Denied for ']).score.agent, 'missing');
   assert.equal(scoreLines(['unrelated line']).score.agent, 'missing');
   assert.ok(looksLikeOAuthClient('0123456789abcdef0123456789abcdef'));
-  assert.ok(!looksLikeOAuthClient('audit-test'));
+  assert.ok(!looksLikeOAuthClient('lab-agent-key'));
 });
 
 test('decision: an explicit denial is met; an app-level permission line is only partial; an auth refusal is partial', () => {
@@ -147,17 +147,17 @@ test('bounds, one at a time: the first MAX_LINES lines are kept, JSON deeper tha
 
 test('logrus text lines are read: key=value pairs, quoted msg, and the markers inside a quoted msg', () => {
   const r = scoreLines([
-    'time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-9, client: audit-test"',
+    'time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-9, client: lab-agent-key"',
     'time="2026-11-07T10:00:00Z" level=info msg="decision made" decision=allow tool=get_weather',
   ]);
   assert.deepEqual([r.score.user, r.score.agent, r.score.tool, r.score.decision], ['met', 'met', 'met', 'met']);
   // spans point at the value inside the line
   const user = r.evidence.user[0];
-  assert.equal('time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-9, client: audit-test"'.slice(user.start, user.end), 'u-9');
+  assert.equal('time="2026-11-07T10:00:00Z" level=info msg="Access token found for user: u-9, client: lab-agent-key"'.slice(user.start, user.end), 'u-9');
 });
 
 test('JSON records are read, with or without a text prefix, and a tools/call payload names the tool', () => {
-  const rec = '{"Event":"mcp_response_blocked","Client":"audit-test","User":"u-1","Category":"x"}';
+  const rec = '{"Event":"mcp_response_blocked","Client":"lab-agent-key","User":"u-1","Category":"x"}';
   assert.deepEqual(Object.values(scoreLines([rec]).score), ['met', 'met', 'missing', 'partial']); // a guardrail block event is not an authorization decision
   assert.equal(scoreLines([`Received HTTP request ${rec}`]).score.user, 'met');
   const payload = 'incoming request: POST /mcp ... payload: {"method":"tools/call","params":{"name":"get_weather","arguments":{}}}';
@@ -210,7 +210,7 @@ test('parsePaste: bounds, blank lines, and an oversize paste is refused', () => 
 });
 
 test('pasted lines are redacted before they are scored or shown, and the user, agent and tool values survive', () => {
-  const p = parsePaste('Access token found for user: u-1, client: audit-test Authorization: Bearer abcdefgh12345678\nsecret=hunter2222 and eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1In0.c2ln');
+  const p = parsePaste('Access token found for user: u-1, client: lab-agent-key Authorization: Bearer abcdefgh12345678\nsecret=hunter2222 and eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1In0.c2ln');
   assert.ok(!p.lines.join('\n').includes('abcdefgh12345678') && !p.lines.join('\n').includes('hunter2222') && !p.lines.join('\n').includes('eyJhbGci'));
   assert.equal(scoreLines(p.lines).score.user, 'met'); assert.equal(scoreLines(p.lines).score.agent, 'met');
 });

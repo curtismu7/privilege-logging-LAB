@@ -126,7 +126,7 @@ export async function runAndFetch(url, caseId, { headers = {}, max = 80, pauseMs
 }
 
 // kubectl-style log lines (RFC 3339 prefix + a logrus line) for what a gateway would write for the calls a FAKE gateway received.
-export function gatewayLog(gw, { payload = true, user = 'u-live', client = 'audit-test', other = [] } = {}) {
+export function gatewayLog(gw, { payload = true, user = 'u-live', client = 'lab-agent-key', other = [] } = {}) {
   const out = [];
   for (const r of gw.requests) {
     let m; try { m = JSON.parse(r.body); } catch { continue; }
