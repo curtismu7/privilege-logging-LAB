@@ -34,6 +34,21 @@ describe("helpers", () => {
   });
 });
 
+describe("Requirement 9 tab when the read fails", () => {
+  it("still lists the requirement's four parts a-d next to the error", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ENOTFOUND: getaddrinfo ENOTFOUND console.example"));
+    render(<Req9Page info={{ source: "real" }} signal={0} rid={null} onSelect={vi.fn()} />);
+    await screen.findByTestId("req9-error");
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(items.slice(0, 4)).toEqual([
+      "User on whose behalf the MCP tool call was made",
+      "Agent identity acting on behalf of the user",
+      "Which tool was called",
+      "What was the authorization policy decision",
+    ]);
+  });
+});
+
 describe("Requirement 9 tab (Mock)", () => {
   it("coverage tiles a-d, the ledger with dashed missing parts, the three gaps and the diagram filled with the newest record", async () => {
     await page();

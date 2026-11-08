@@ -9,6 +9,13 @@ import PatternDiagram from "./PatternDiagram";
 // The server reads, redacts and computes everything (GET /api/req9); this page only shows it, as React text.
 export const RID = /^[A-Za-z0-9_-]{1,64}$/;
 const PART_KEYS = ["a", "b", "c", "d"];
+// The requirement's own wording, so the list reads the same before the logs load or when a read fails.
+const QUESTIONS = {
+  a: "User on whose behalf the MCP tool call was made",
+  b: "Agent identity acting on behalf of the user",
+  c: "Which tool was called",
+  d: "What was the authorization policy decision",
+};
 const DECISION = { allow: "ok", deny: "danger", hitl: "warn" };
 const STATUS = { met: ["ok", "MET ON DECISIONS"], partial: ["warn", "PARTIAL"], missing: ["danger", "MISSING"] };
 const shortTime = (iso) => (iso ? iso.replace("T", " ").replace(/\.\d+Z$/, "Z") : "no time");
@@ -94,7 +101,7 @@ export default function Req9Page({ info, signal, rid, onSelect, onConfirmNeeded 
       <p className="channel channel--privilege-es" data-testid="req9-channel">PRIVILEGE -&gt; ELASTICSEARCH ONLY: {data?.channel || "Privilege -> Elasticsearch (Privilege hosted), read through the console"}. Indices policy-decision-log and proxy-audit-log{data ? `, ${shortTime(data.from)} to ${shortTime(data.to)}` : ", the last 90 days"}.</p>
       <blockquote className="req9-quote" data-testid="req9-requirement">
         Gateway is able to provide an end to end audit trail for all the MCP interactions. The audit trail should clearly emit:
-        <ol type="a">{PART_KEYS.map((k) => <li key={k}>{data?.parts?.[k]?.question || ""}</li>)}</ol>
+        <ol type="a">{PART_KEYS.map((k) => <li key={k}>{data?.parts?.[k]?.question || QUESTIONS[k]}</li>)}</ol>
       </blockquote>
       {data?.note && <p className="muted" data-testid="req9-mock-note">Mock: {data.note}</p>}
       {data?.limit && <p className="notice" data-testid="req9-limit">{data.limit}</p>}
