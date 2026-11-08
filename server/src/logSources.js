@@ -108,7 +108,8 @@ export async function elasticlogSearch({ client, decisions, indices = PRIVILEGE_
   let hits = null; let total = null;
   try {
     const outer = JSON.parse(res.text);
-    const inner = typeof outer?.Response === 'string' ? JSON.parse(Buffer.from(outer.Response.slice(0, DECISION_MAX_BYTES * 2), 'base64').toString('utf8')) : outer?.Response;
+    // The client masks its secrets in the answer text, but the records are inside base64 there: mask them again once decoded.
+    const inner = typeof outer?.Response === 'string' ? JSON.parse(client.redact(Buffer.from(outer.Response.slice(0, DECISION_MAX_BYTES * 2), 'base64').toString('utf8'))) : outer?.Response;
     hits = inner?.hits?.hits; total = typeof inner?.hits?.total === 'object' ? inner.hits.total.value : inner?.hits?.total;
   } catch { /* not the console's shape */ }
   if (!Array.isArray(hits) || res.truncated) throw fail('source_bad_shape', res.truncated ? 'the console answer was cut at the size cap' : 'the console answer holds no log records (Response.hits.hits)', hop);

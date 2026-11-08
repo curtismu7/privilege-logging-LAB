@@ -8,12 +8,13 @@ import express from 'express';
 import { hostCheck, sameOriginWrites } from './safety.js';
 import { createHealth } from './health.js';
 import { loadCapture } from './capture.js';
-import { bearerFromSettings, fedConfig, modeFrom, realConfig } from './config.js';
+import { bearerFromSettings, fedConfig, kibanaConfig, modeFrom, realConfig } from './config.js';
 import { FED_ISSUER, FED_SUBJECT, FED_TOKEN_LIFE_SEC, MINTED_CASE, SEED, signerFrom } from './fedIssuer.js';
 import { RealError, createRealClient } from './realClient.js';
 import { setAllowedHosts } from './netguard.js';
 import { EXTRA_SINKS, REAL_ONLY_NOTE, attachPasted, caseSummary, fetchAttempt, mockFetch, mockSend, realSend, scorePasted, scorecardRows, toMarkdown } from './lab.js';
-import { readDecisions, sourcesFrom } from './logSources.js';
+import { sourcesFrom } from './logSources.js';
+import { KIBANA_DATA_VIEW, KIBANA_HINT, RECORD_CAP, VIEW_PAGE, applyFilters, entriesOf, facetsOf, histogramOf, kibanaUrl, kqlOf, limitNote, parseExplorerQuery, parseRelatedQuery, readWindow, relatedOf, summaryOf } from './privilegeExplorer.js';
 import { newTrace } from './trace.js';
 import { SINK_CHANNEL } from './eventKind.js';
 import { parsePaste } from './logparse.js';
@@ -28,7 +29,7 @@ const WEB_DIST = process.env.WEB_DIST || path.resolve(HERE, '../../web/dist');
 export function createApp({
   health = createHealth(), env = process.env, useSettingsFile = true, now = Date.now, workspaces = createWorkspaces({ now }),
   capture = loadCapture(), lookup, realTimeoutMs, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  retryMs = 1000, maxMs = 15_000, fallbackMs = 4000, mockDelayMs = 600,
+  retryMs = 1000, maxMs = 15_000, fallbackMs = 4000, mockDelayMs = 600, privilegeCap = RECORD_CAP,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -213,24 +214,63 @@ export function createApp({
     return store(await fetchAttempt(run, c, { client, cfg: conf, now, limits, restart: req.body.restart === true }));
   }));
 
-  // Privilege -> Elasticsearch: only what Privilege itself writes to its hosted Elasticsearch, read through the console (elasticlog), for
-  // the last N minutes. Mock: a recorded sample of the decision records measured on 2026-11-07. Read-only.
-  api.get('/privilege-logs', withWorkspace(async (ws, req, res) => {
-    const minutes = Number(req.query.minutes ?? 60);
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10_080) return res.status(400).json({ error: 'bad_minutes', detail: 'minutes must be a whole number from 1 to 10080 (7 days)' });
-    if (mode === 'mock') return res.json({ source: 'mock', ...privilegeSample });
+  // Privilege -> Elasticsearch: only what Privilege itself writes to its hosted Elasticsearch, read through the console (elasticlog).
+  // Any range up to 90 days back, paged through the console (capped), parsed into fields, filtered, counted and paged here. Mock: the
+  // recorded sample (recorded shapes, placeholder values), with ranges counted back from the end of the recording. Read-only.
+  const mockClock = Date.parse(privilegeSample.clock);
+  const mockEntries = entriesOf(privilegeSample.hits);
+  const kibana = () => kibanaConfig(env, settingsOpts);
+  // Real reads go through the confirm gate; the parsed (redacted) records of the last range are kept for a minute per tab, so paging
+  // and changing filters do not read the console again.
+  const privilegeRead = async (ws, res, fromMs, toMs) => {
     const conf = cfg();
-    if (!conf.ok) return res.status(409).json({ error: 'real_not_configured', detail: conf.problem });
-    if (!conf.decisions) return res.status(409).json({ error: 'console_not_configured', detail: 'Set PRIV_LOG_CONSOLE_URL and PRIV_LOG_CONSOLE_TENANT (and PRIV_LOG_CONSOLE_CA for the local console) to read Privilege\'s logs.' });
-    if (workspaces.state(ws).confirmed !== signature(conf)) return res.status(412).json({ error: 'confirm_required', detail: 'Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null, decisionsOrigin: conf.decisions.origin });
-    const toMs = now(); const fromMs = toMs - minutes * 60_000;
+    if (!conf.ok) { res.status(409).json({ error: 'real_not_configured', detail: conf.problem }); return null; }
+    if (!conf.decisions) { res.status(409).json({ error: 'console_not_configured', detail: 'Set PRIV_LOG_CONSOLE_URL and PRIV_LOG_CONSOLE_TENANT (and PRIV_LOG_CONSOLE_CA for the local console) to read Privilege\'s logs.' }); return null; }
+    const st = workspaces.state(ws);
+    if (st.confirmed !== signature(conf)) { res.status(412).json({ error: 'confirm_required', detail: 'Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null, decisionsOrigin: conf.decisions.origin }); return null; }
+    const key = `${signature(conf)}|${fromMs}|${toMs}`;
+    if (st.privCache?.key === key && now() - st.privCache.at < 60_000) return st.privCache.value;
     try {
-      const r = await readDecisions({ client: clientFor(conf), decisions: conf.decisions, fromMs, toMs, trace: newTrace() });
-      return res.json({ source: 'real', channel: 'Privilege -> Elasticsearch (Privilege hosted), read through the console', origin: conf.decisions.origin, from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString(),
-        truncated: r.truncated, entries: r.lines.map((l) => ({ index: l.index, kind: l.kind, at: l.ts ? new Date(l.ts).toISOString() : null, text: l.text })) });
+      const r = await readWindow({ client: clientFor(conf), decisions: conf.decisions, fromMs, toMs, trace: newTrace(), cap: privilegeCap });
+      const value = { entries: entriesOf(r.hits), origin: conf.decisions.origin, limit: limitNote({ stop: r.stop, read: r.hits.length, total: r.total, cap: privilegeCap }), total: r.total, requests: r.requests };
+      st.privCache = { key, at: now(), value };
+      return value;
     } catch (e) {
-      return res.status(502).json({ error: e.code || 'source_unreachable', detail: e.detail || e.message });
+      res.status(502).json({ error: e.code || 'source_unreachable', detail: e.detail || e.message });
+      return null;
     }
+  };
+  api.get('/privilege-logs', withWorkspace(async (ws, req, res) => {
+    const clock = mode === 'mock' ? mockClock : now();
+    const q = parseExplorerQuery(req.query, { now: clock });
+    if (q.error) return res.status(400).json(q);
+    let base;
+    if (mode === 'mock') base = { entries: mockEntries.filter((e) => { const t = Date.parse(e.at); return t >= q.from && t <= q.to; }), origin: null, limit: null, total: null };
+    else { base = await privilegeRead(ws, res, q.from, q.to); if (!base) return undefined; }
+    const filtered = applyFilters(base.entries, q.filters);
+    const pages = Math.max(1, Math.ceil(filtered.length / VIEW_PAGE));
+    const page = Math.min(q.page, pages - 1);
+    const k = kibana(); const kql = kqlOf(q.filters);
+    return res.json({
+      source: mode, channel: privilegeSample.channel, origin: base.origin, from: new Date(q.from).toISOString(), to: new Date(q.to).toISOString(),
+      clock: { now: new Date(clock).toISOString(), maxBackDays: 90, mock: mode === 'mock' },
+      ...(mode === 'mock' ? { label: privilegeSample.label, note: privilegeSample.note, recordedOn: privilegeSample.recordedOn } : {}),
+      read: base.entries.length, reported: base.total, limit: base.limit, filters: q.filters,
+      summary: summaryOf(filtered), histogram: histogramOf(filtered, q.from, q.to), facets: facetsOf(base.entries),
+      paging: q.all ? { all: true, total: filtered.length } : { page, pageSize: VIEW_PAGE, pages, total: filtered.length, newer: page > 0, older: page < pages - 1 },
+      entries: q.all ? filtered : filtered.slice(page * VIEW_PAGE, (page + 1) * VIEW_PAGE),
+      kibana: { origin: k.origin, problem: k.problem, dataView: KIBANA_DATA_VIEW, kql, url: k.origin ? kibanaUrl(k.origin, { fromMs: q.from, toMs: q.to, kql }) : null, hint: KIBANA_HINT },
+    });
+  }));
+  // Every record within +/-10 minutes of one entry that shares its request id or trace id (and, one hop on, an id of such a record).
+  api.get('/privilege-logs/related', withWorkspace(async (ws, req, res) => {
+    const clock = mode === 'mock' ? mockClock : now();
+    const q = parseRelatedQuery(req.query, { now: clock });
+    if (q.error) return res.status(400).json(q);
+    let base;
+    if (mode === 'mock') base = { entries: mockEntries.filter((e) => { const t = Date.parse(e.at); return t >= q.from && t <= q.to; }), limit: null };
+    else { base = await privilegeRead(ws, res, q.from, q.to); if (!base) return undefined; }
+    return res.json({ source: mode, from: new Date(q.from).toISOString(), to: new Date(q.to).toISOString(), requestId: q.requestId, traceId: q.traceId, limit: base.limit, entries: relatedOf(base.entries, q) });
   }));
 
   // Pure scoring of pasted lines (works in both modes). With a caseId in Real mode and an existing run, the lines are attached to that run.
