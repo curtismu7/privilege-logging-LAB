@@ -137,6 +137,17 @@ async function mockProof(browser) {
     const filtered = await p.locator('[data-testid=lines-gateway-log] [data-testid=entry-item]').count();
     await p.click('[data-testid=lines-gateway-log] [data-testid=tag-filter-clear]');
     check(`mock/${theme}: entry tags filter the trace (auth = 1 of 3) and Clear restores`, filtered === 1 && (await p.locator('[data-testid=lines-gateway-log] [data-testid=entry-item]').count()) === 3);
+    // back from a Trace opened far down the Run page: the button and the browser Back both land on that case card, in view
+    const inView = (id) => p.evaluate((sel) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return !!r && r.top < window.innerHeight && r.bottom > 0; }, `[data-testid=case-${id}]`);
+    await p.click('[data-testid=back-to-run]'); await p.waitForSelector('[data-testid=run-page]');
+    await p.locator('[data-testid=case-intent-encoder-unreachable]').scrollIntoViewIfNeeded();
+    await p.click('[data-testid=open-intent-encoder-unreachable]'); await p.waitForSelector('[data-testid=trace-page]');
+    await p.click('[data-testid=back-to-run]'); await p.waitForSelector('[data-testid=run-page]');
+    const byButton = await inView('intent-encoder-unreachable');
+    await p.click('[data-testid=open-intent-encoder-unreachable]'); await p.waitForSelector('[data-testid=trace-page]');
+    await p.goBack(); await p.waitForSelector('[data-testid=run-page]');
+    check(`mock/${theme}: Back to Run and the browser Back both return to the Run page with the opened case in view`, byButton && await inView('intent-encoder-unreachable') && (await p.locator('[data-testid=trace-page]').count()) === 0);
+    await p.click('[data-testid=open-mcp-allowed-key]'); await p.waitForSelector('[data-testid=lines-gateway-log]');
     await shot(p, `mock-${theme}-trace`, { fullPage: true });
     await jsonProof(p, `mock/${theme}`, `mock-${theme}`);
     const contrast = await p.evaluate(CONTRAST);
