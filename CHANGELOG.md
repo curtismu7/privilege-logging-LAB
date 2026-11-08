@@ -4,6 +4,7 @@
 
 - Trace: every log entry has clickable tags (event type, this call or nearby, labels, identity) and each sink has a tag filter with counts.
 - Run stays on the Run page: the result shows on the card and focus goes back to that Run button; Open trace is a separate click. Look for entries works the same way.
+- Real: the confirm before the first send opens inside the case card you ran (Send button there), so the page no longer jumps to the top. Run all and the Privilege page keep the top-of-page confirm.
 
 ## Unreleased (workload token)
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Busy from "./Busy";
 import FedSetup from "./FedSetup";
+import ConfirmGate from "./ConfirmGate";
 import { Chip, LevelChip } from "./Chips";
 
 const summary = (r) => [r.method, r.tool, r.app && `app ${r.app}`, r.model && `model ${r.model}`].filter(Boolean).join(" · ");
@@ -22,7 +23,7 @@ function BearerField({ c, onBearer }) {
   );
 }
 
-export default function RunPage({ cases, runs, info, running, busy = {}, onRun, onLook, onRetry, onBearer, onRunAll, onOpen }) {
+export default function RunPage({ cases, runs, info, running, busy = {}, gate = null, onConfirm, onCancelGate, onRun, onLook, onRetry, onBearer, onRunAll, onOpen }) {
   const real = info?.source === "real";
   const [since, setSince] = useState(ago(15));
   const mode = real ? "real" : "mock";
@@ -78,6 +79,7 @@ export default function RunPage({ cases, runs, info, running, busy = {}, onRun, 
                     {r && r.outcome.http !== null && <Chip kind={r.outcome.http >= 400 || r.outcome.isError ? "warn" : "ok"}>HTTP {r.outcome.http}</Chip>}
                     {r && !r.scored && !b && r.retrieval?.state === "not_configured" && <Chip kind="warn">paste log lines to score</Chip>}
                   </div>
+                  {gate?.queue?.[0] === c.id && <ConfirmGate gate={gate} onConfirm={onConfirm} onCancel={onCancelGate} busy={!!running} inline />}
                   <Busy id={c.id} b={b} mode={mode} onRetry={onRetry} />
                   {r && r.scored && !active && (
                     <p className="row" role="group" aria-label="score">
