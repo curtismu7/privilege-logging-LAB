@@ -69,7 +69,8 @@ mark[data-field="user"] { text-decoration-color: var(--status-info); text-decora
 mark[data-field="agent"] { text-decoration-color: var(--status-ok); text-decoration-style: dashed; }
 mark[data-field="tool"] { text-decoration-color: var(--status-warn); text-decoration-style: dotted; }
 mark[data-field="decision"] { text-decoration-color: var(--danger-text); text-decoration-style: double; }
-mark[data-level="partial"] { opacity: 0.85; }
+/* partial: a thinner underline, never reduced opacity (opacity took the bold text below 4.5:1 in the light theme) */
+mark[data-level="partial"] { text-decoration-thickness: 1px; }
 
 /* Tables */
 .scroll { overflow-x: auto; }
@@ -128,7 +129,7 @@ button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:h
 .jt__twisty--leaf { display: inline-block; border-color: transparent; background: transparent; cursor: default; }
 .jt__key { color: var(--json-key); font-weight: 700; }
 .jt__punct { color: var(--muted); }
-.jt__str { color: var(--json-string); overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; }
+.jt__str { color: var(--json-string); overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; flex: 1 1 16ch; } /* a long string wraps inside its own column, not back under the key */
 .jt__num { color: var(--json-number); }
 .jt__bool { color: var(--json-bool); font-weight: 700; }
 .jt__null { color: var(--json-null); }
@@ -142,4 +143,7 @@ button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:h
 .channel { margin: 0.25rem 0 0.4rem; padding: 0.3rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.02em; border: 1px solid var(--border); }
 .channel--privilege-es { background: var(--ok-bg, rgba(46, 160, 67, 0.15)); border-color: var(--ok, #2ea043); }
 .channel--pod { background: var(--warn-bg, rgba(210, 153, 34, 0.15)); border-color: var(--warn, #d29922); }
+/* A disabled primary must look disabled (the shared sheet only fades it to 0.88, which reads as enabled): flat surface, muted text,
+   dashed edge. Muted on --surface-2 stays above 4.5:1 in both themes. Override here; standalone-ui.css is vendored. */
+button.primary:disabled { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--muted); opacity: 1; }
 .priv-filters { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; margin: 0.5rem 0; }

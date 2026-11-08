@@ -24,10 +24,10 @@ export default function ScorecardPage({ info, runsSignal, onOpen }) {
   return (
     <div data-testid="scorecard-page">
       <p className="lede">{card.source === "mock" ? `Measured on ${card.capturedOn}: what each use case logged, scored against the four requirement clauses. Cases marked not measured have no recording yet (Real mode only): no result is shown for them.` : "Real: scored from the log lines each run actually returned. Cases not run, or run without log lines, are marked."}</p>
-      <div className="card-grid" aria-label="Totals">
+      <div className="card-grid" role="group" aria-label="Totals">
         {FIELDS.map((f) => (
           <article key={f} className="card card--neutral" data-testid={`total-${f}`}>
-            <h3 className="card__title">{FIELD_LABEL[f]}</h3>
+            <h2 className="card__title">{FIELD_LABEL[f]}</h2>
             <p className="row">{["met", "partial", "missing", "na"].map((l) => <span key={l} className="ltag"><LevelChip level={l} /> <b>{tally(f, l)}</b></span>)}</p>
           </article>
         ))}

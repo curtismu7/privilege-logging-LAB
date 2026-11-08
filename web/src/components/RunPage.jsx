@@ -27,11 +27,13 @@ export default function RunPage({ cases, runs, info, running, busy = {}, onRun, 
   const mode = real ? "real" : "mock";
   const runnable = (c) => (real ? c.realRunnable : !c.realOnly);
   const sources = info?.retrieval?.sources || [];
+  // info === null: /api/info failed, so the page cannot say whether a Run would send. Nothing runs until it loads.
+  const unknown = info === null;
   return (
     <div data-testid="run-page">
       <div className="row row--between">
         <p className="lede">{real ? `Real: each Run sends the case to your gateway, then fetches the log entry${sources.length ? ` from ${sources.map((s) => s.label).join(" and ")}` : ""}. ${sources.length ? "" : "No log source is configured: you will paste the lines."}` : "Mock: each Run replays a transaction measured on the capture date, then shows its recorded log entry. Nothing is sent."}</p>
-        <button type="button" className="primary" onClick={onRunAll} disabled={!!running} data-testid="run-all">Run all{real ? " runnable" : ""} ({cases.cases.filter((c) => (real ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).length})</button>
+        <button type="button" className="primary" onClick={onRunAll} disabled={!!running || unknown} data-testid="run-all">Run all{real ? " runnable" : ""} ({cases.cases.filter((c) => (real ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).length})</button>
       </div>
       {cases.groups.map((g) => (
         <section key={g} aria-labelledby={`grp-${g}`}>
@@ -41,9 +43,12 @@ export default function RunPage({ cases, runs, info, running, busy = {}, onRun, 
               const r = runs[c.id]; const b = busy[c.id];
               const active = b && (b.phase === "sending" || b.phase === "fetching");
               const mockOnlyBlock = !real && c.realOnly;
+              const tid = `ct-${c.id}`;
+              const runText = active ? "Running..." : r ? "Run again" : "Run";
+              const lookText = active ? "Looking..." : "Look for entries";
               return (
-                <article key={c.id} className="card" data-testid={`case-${c.id}`} aria-busy={active ? "true" : "false"}>
-                  <h3 className="card__title">{c.title}</h3>
+                <article key={c.id} className="card" data-testid={`case-${c.id}`} aria-busy={active ? "true" : "false"} aria-labelledby={tid}>
+                  <h3 className="card__title" id={tid}>{c.title}</h3>
                   <p className="muted">{c.identity}</p>
                   <p><code>{summary(c.request)}</code></p>
                   {c.realOnly && <p className="muted" data-testid={`needs-${c.id}`}><Chip kind="warn">not measured</Chip> {c.generatedCredential ? "Nothing to supply: the lab generates the credential." : `Needs: ${c.needs.join("; ")}`}</p>}
@@ -60,20 +65,20 @@ export default function RunPage({ cases, runs, info, running, busy = {}, onRun, 
                   )}
                   <div className="row">
                     {real && c.consoleAction ? (
-                      <button type="button" className="primary" onClick={() => onLook(c.id, new Date(since).toISOString())} disabled={!!running || !since} data-testid={`run-${c.id}`}>{active ? "Looking..." : "Look for entries"}</button>
+                      <button type="button" className="primary" onClick={() => onLook(c.id, new Date(since).toISOString())} disabled={!!running || !since || unknown} data-testid={`run-${c.id}`} aria-label={`${lookText}: ${c.title}`}>{lookText}</button>
                     ) : (
-                      <button type="button" className="primary" onClick={() => onRun(c.id)} disabled={!!running || !runnable(c) || (real && c.needsBearer && !c.bearerConfigured)} data-testid={`run-${c.id}`}
+                      <button type="button" className="primary" onClick={() => onRun(c.id)} disabled={!!running || unknown || !runnable(c) || (real && c.needsBearer && !c.bearerConfigured)} data-testid={`run-${c.id}`} aria-label={`${runText}: ${c.title}`}
                         title={mockOnlyBlock ? MOCK_ONLY_NOTE : !runnable(c) ? c.realNote || "" : real && c.needsBearer && !c.bearerConfigured ? "Set the credential for this case first." : ""}>
-                        {active ? "Running..." : r ? "Run again" : "Run"}
+                        {runText}
                       </button>
                     )}
-                    {r && <button type="button" onClick={() => onOpen(c.id)} data-testid={`open-${c.id}`}>Open trace</button>}
+                    {r && <button type="button" onClick={() => onOpen(c.id)} data-testid={`open-${c.id}`} aria-label={`Open trace: ${c.title}`}>Open trace</button>}
                     {r && r.outcome.http !== null && <Chip kind={r.outcome.http >= 400 || r.outcome.isError ? "warn" : "ok"}>HTTP {r.outcome.http}</Chip>}
                     {r && !r.scored && !b && r.retrieval?.state === "not_configured" && <Chip kind="warn">paste log lines to score</Chip>}
                   </div>
                   <Busy id={c.id} b={b} mode={mode} onRetry={onRetry} />
                   {r && r.scored && !active && (
-                    <p className="row" aria-label="score">
+                    <p className="row" role="group" aria-label="score">
                       {["user", "agent", "tool", "decision"].map((f) => <span key={f} className="ltag"><span className="ltag__name">{f}</span> <LevelChip level={r.score[f]} />{r.scoreInferred?.[f] && <Chip kind="warn">inferred</Chip>}</span>)}
                     </p>
                   )}

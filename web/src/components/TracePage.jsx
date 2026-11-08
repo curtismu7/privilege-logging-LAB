@@ -68,7 +68,7 @@ export default function TracePage({ cases, runs, sinkInfo, info, caseId, busy = 
             ))}
           </select>
         </label>
-        <button type="button" className="primary" onClick={() => onRun(caseId)} disabled={!!running || !caseId} data-testid="trace-run">{result ? "Run again" : "Run this case"}</button>
+        <button type="button" className="primary" onClick={() => onRun(caseId)} disabled={!!running || !caseId || info === null} data-testid="trace-run">{result ? "Run again" : "Run this case"}</button>
       </div>
       <Busy id={caseId} b={busy[caseId]} mode={real ? "real" : "mock"} onRetry={onRetry} />
       {!result && !busy[caseId] && <p className="muted" data-testid="trace-empty">This case has not been run in this tab. Press Run to {real ? "send it to your gateway" : "replay the recorded transaction"}.</p>}

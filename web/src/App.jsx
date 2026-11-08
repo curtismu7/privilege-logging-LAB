@@ -23,6 +23,8 @@ export const TABS = [
 const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", privilege: "Privilege -> Elasticsearch: only what Privilege itself logged", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
 // Never blank: until /api/story answers (or if it fails) the banner says the safe thing.
 export const BANNER_UNKNOWN = "SIMULATED. Replay of transactions measured on 2026-11-07; nothing is sent.";
+// /api/info failed: the page does not know the mode, so it must not claim Mock ("nothing is sent") or Real. Runs are disabled.
+export const BANNER_MODE_UNKNOWN = "MODE UNKNOWN. The lab's mode could not be read (/api/info failed), so this page cannot say whether a Run is simulated or sent. Runs are disabled until it loads: press Retry.";
 
 const parseHash = () => {
   const [tab, id] = window.location.hash.replace("#", "").split("/");
@@ -44,6 +46,8 @@ export default function App() {
   const [gate, setGate] = useState(null); // { gatewayOrigin, searchOrigin, queue }
   const [signal, setSignal] = useState(0);
   const [busy, setBusy] = useState({}); // caseId -> { phase: sending|fetching|timeout|unreachable|error, attempt, elapsedMs, maxMs, detail }
+  const [focusReq, setFocusReq] = useState(null); // { target: "title" | a data-testid }: where focus goes once a run has finished
+  const titleRef = useRef(null);
   const epoch = useRef(0); // bumped by Reset and by a mode switch: a polling loop that sees a newer epoch stops
 
   const loadInfo = useCallback(() => getJson("/api/info").then(setInfo, () => setInfo(null)), []);
@@ -61,6 +65,7 @@ export default function App() {
   useEffect(() => {
     const on = (e) => {
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+P / Cmd+P is print, not presenter mode
       if (e.key === "p" || e.key === "P") setPresenter((v) => !v);
       else if (e.key === "Escape") setPresenter(false);
     };
@@ -86,7 +91,8 @@ export default function App() {
       const res = await fetchLog(id, first).catch(() => ({ ok: false, status: 0, body: {} }));
       first = false;
       if (epoch.current !== my) return "stopped";
-      if (!res.ok) { setPhase(id, { phase: "error", detail: res.body?.detail || res.body?.error || "Could not fetch the log entry." }); return "failed"; }
+      // fetchFailed: the call itself was sent (or replayed); only the log fetch failed, so Busy offers Retry (fetch again, no resend).
+      if (!res.ok) { setPhase(id, { phase: "error", fetchFailed: true, detail: res.body?.detail || res.body?.error || "Could not fetch the log entry." }); return "failed"; }
       setRuns((r) => ({ ...r, [id]: res.body }));
       const rt = res.body.retrieval || {};
       if (rt.state === "pending") { setPhase(id, { phase: "fetching", attempt: rt.attempt, elapsedMs: rt.elapsedMs, maxMs: rt.maxMs ?? info?.retrieval?.maxMs, detail: rt.detail, simulated: !!rt.simulated }); await sleep(rt.simulated ? 0 : interval); continue; }
@@ -114,17 +120,28 @@ export default function App() {
   }, [fetchLoop, info, setPhase]);
   const retry = useCallback(async (id) => { setRunning(id); setPhase(id, { phase: "fetching", attempt: 0, maxMs: info?.retrieval?.maxMs, detail: "Retrying." }); try { await fetchLoop(id, true); } finally { setRunning(null); } }, [fetchLoop, info, setPhase]);
 
-  const runList = useCallback(async (ids, { openTrace = false } = {}) => {
+  // While a case runs every Run button is disabled, so the browser drops focus to <body>. When the run ends, focus goes to the
+  // Trace heading (a run that opened its Trace) or back to the button that started it, so keyboard users keep their place.
+  const runList = useCallback(async (ids, { openTrace = false, from = null } = {}) => {
     for (let i = 0; i < ids.length; i += 1) {
       const r = await doRun(ids[i]);
       if (r === "confirm") { setGate((g) => (g ? { ...g, queue: ids.slice(i), openTrace } : g)); return; }
-      if (r === "ok" && openTrace && ids.length === 1) go("trace", ids[0]);
+      if (r === "ok" && openTrace && ids.length === 1) { go("trace", ids[0]); setFocusReq({ target: "title" }); return; }
     }
+    setFocusReq({ target: from || (ids.length === 1 ? `run-${ids[0]}` : "run-all") });
   }, [doRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onRun = (id) => runList([id], { openTrace: true });
-  const onLook = (id, sinceIso) => doRun(id, { since: sinceIso }).then((r) => { if (r === "ok") go("trace", id); });
-  const onRunAll = () => runList(cases.cases.filter((c) => (info?.source === "real" ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).map((c) => c.id));
+  const onLook = (id, sinceIso) => doRun(id, { since: sinceIso }).then((r) => { if (r === "ok") { go("trace", id); setFocusReq({ target: "title" }); } });
+  const onRunAll = () => runList(cases.cases.filter((c) => (info?.source === "real" ? c.realRunnable && !c.consoleAction && (!c.needsBearer || c.bearerConfigured) : !c.realOnly)).map((c) => c.id), { from: "run-all" });
+  useEffect(() => {
+    if (!focusReq || running) return;
+    const el = focusReq.target === "title" ? titleRef.current : document.querySelector(`[data-testid="${focusReq.target}"]`);
+    const at = document.activeElement;
+    // only when focus was lost (body, nothing, a disabled or removed control): never take focus from where the user moved it
+    if (el && !el.disabled && (!at || at === document.body || at.disabled || !at.isConnected)) el.focus();
+    setFocusReq(null);
+  }, [focusReq, running, nav]);
   const onConfirm = async () => {
     const { queue, openTrace } = gate;
     const res = await confirmGateway(gate.gatewayOrigin);
@@ -160,13 +177,14 @@ export default function App() {
   };
 
   const real = info?.source === "real";
-  const banner = story ? (real ? story.realBanner : story.banner) : BANNER_UNKNOWN;
+  const banner = info === null ? BANNER_MODE_UNKNOWN : story ? (real ? story.realBanner : story.banner) : BANNER_UNKNOWN;
+  const realHint = info && !info.realAvailable && !real ? info.realHint || "Real is not configured. Mock keeps working." : "";
   const say = story && presenter && nav.tab !== "talk" ? story.talkTrack.filter((t) => (story.pageSays[nav.tab] || []).includes(t.id)) : [];
 
   return (
     <div className={`app${presenter ? " app--presenter" : ""}`}>
       <header className="shell-bar">
-        <span className="shell-brand"><span className="shell-logo" aria-hidden="true">P</span> Privilege Logging Lab <span className="shell-badge" data-testid="mode">{info ? (real ? "Real" : "Mock") : "..."}</span></span>
+        <span className="shell-brand"><span className="shell-logo" aria-hidden="true">P</span> Privilege Logging Lab <span className="shell-badge" data-testid="mode">{info ? (real ? "Real" : "Mock") : info === null ? "Unknown" : "..."}</span></span>
         <nav className="shell-nav" aria-label="Pages">
           {TABS.map((t) => <a key={t.id} href={`#${t.id}`} aria-current={nav.tab === t.id ? "page" : undefined} onClick={(e) => { e.preventDefault(); go(t.id, t.id === "trace" ? selected : null); }} data-testid={`nav-${t.id}`}>{t.label}</a>)}
         </nav>
@@ -174,11 +192,12 @@ export default function App() {
           {info && (
             <span className="seg" role="group" aria-label="Data source" data-testid="mode-toggle">
               <button type="button" aria-pressed={!real} data-testid="mode-mock" onClick={() => switchTo("mock")}>Mock</button>
-              <button type="button" aria-pressed={real} data-testid="mode-real" disabled={!info.realAvailable && !real}
+              <button type="button" aria-pressed={real} data-testid="mode-real" disabled={!info.realAvailable && !real} aria-describedby={realHint ? "real-hint" : undefined}
                 title={info.realAvailable ? "Send to your configured gateway and read the log back (owner-run)" : info.realHint || "Real is not configured. Mock keeps working."}
                 onClick={() => switchTo("real")}>Real</button>
             </span>
           )}
+          {info === null && <button type="button" onClick={loadInfo} data-testid="mode-retry">Retry mode</button>}
           <button type="button" onClick={refresh} data-testid="refresh" title="Stop any wait for a log entry, free the Run buttons and reload the data. Your runs are kept.">Refresh</button>
           <button type="button" onClick={reset} data-testid="reset">Reset</button>
           <button type="button" aria-pressed={presenter} onClick={() => setPresenter((v) => !v)} data-testid="presenter">{presenter ? "Exit presenter (Esc)" : "Presenter (P)"}</button>
@@ -191,8 +210,10 @@ export default function App() {
         </span>
       </header>
       <main className="page">
-        <div className="banner" role="note" data-testid="banner" data-state={real ? "live" : undefined}>{banner}</div>
-        <h1>{TITLES[nav.tab]}</h1>
+        <div className="banner" role="note" data-testid="banner" data-state={info === null ? "unknown" : real ? "live" : undefined}>{banner}</div>
+        {/* A disabled Real button is skipped by Tab and shows no tooltip on touch, so its how-to is also on the page. */}
+        {realHint && !presenter && <p className="muted" id="real-hint" data-testid="real-hint">Real is unavailable: {realHint}</p>}
+        <h1 ref={titleRef} tabIndex={-1}>{TITLES[nav.tab]}</h1>
         {!presenter && story && nav.tab === "run" && <p className="intro">{story.intro}</p>}
         <p className="sr-only" role="status" aria-live="polite" data-testid="status">{notice}</p>
         {notice && !presenter && <p className="notice" data-testid="notice">{notice}</p>}
@@ -206,7 +227,7 @@ export default function App() {
           <>
             {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "privilege" && <PrivilegePage info={info} signal={signal} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
-            {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id])} onRetry={retry} onChanged={loadRuns} running={running} />}
+            {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id], { from: "trace-run" })} onRetry={retry} onChanged={loadRuns} running={running} />}
             {nav.tab === "scorecard" && <ScorecardPage info={info} runsSignal={`${signal}:${Object.keys(runs).length}:${Object.values(runs).map((r) => `${r.ranAt}${r.scored}${r.logged.length}`).join("")}`} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "sinks" && <SinksPage sinkInfo={sinkInfo} story={story} />}
             {nav.tab === "diagram" && <DiagramPage resetSignal={signal} />}
