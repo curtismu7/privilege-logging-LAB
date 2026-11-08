@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Honesty fixes: a guardrail block scores decision partial (not an authorization decision); `Access Denied` counts as met only on a gateway line; every tools/list case is n/a for tool; the console sink is UNVERIFIED (never read); score notes disclose where the recorded level differs from the scorer on the sample lines; the "(no guardrail line)" annotation is no longer stored as a log line; per-field tallies are labelled inferred; the refusal and sink facts are counted from the capture; the Real banner names the kubectl proxy pod-log source.
+- Honesty fixes: a guardrail block scores decision partial (not an authorization decision); `Access Denied` counts as met only on a gateway line; an intent-unavailable warning is no decision evidence; every tools/list case is n/a for tool; the console sink is UNVERIFIED (never read); score notes disclose where the recorded level differs from the scorer on the sample lines; the "(no guardrail line)" annotation is no longer stored as a log line; per-field tallies are labelled inferred; the refusal and sink facts are counted from the capture; the Real banner names the kubectl proxy pod-log source.
 - Privilege -> Elasticsearch tab: only what Privilege itself logged (its hosted indices, read through the console's elasticlog API), for a time range, with runtime/console and index filters. Mock shows the five decision records recorded on 2026-11-07.
 - Privilege logs as a Real log source on every run (PRIV_LOG_CONSOLE_URL, PRIV_LOG_CONSOLE_TENANT, PRIV_LOG_CONSOLE_CA), matched by time window and app.
 - Every entry says where it came from (channel badge: gateway pod log vs Privilege -> Elasticsearch vs other) and what kind it is (runtime or console event).

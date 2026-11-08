@@ -113,7 +113,7 @@ test('decision rules, one at a time', () => {
   assert.equal(d('{"Event":"policy_denied"}'), 'met', 'a denied event is a verdict');
   assert.equal(d('{"Event":"tool_forbidden"}'), 'met', 'a forbidden event is a verdict');
   assert.equal(d('{"Event":"tool_called"}'), 'missing', 'an ordinary event is no decision');
-  assert.equal(d('[mcpgw] aiintent: configuration <id> is not usable, intent signals stay unavailable'), 'partial', 'an intent-unavailable warning');
+  assert.equal(d('[mcpgw] aiintent: configuration <id> is not usable, intent signals stay unavailable'), 'missing', 'an intent-unavailable warning carries no verdict');
   assert.equal(d('[mcpgw] aiintent: verdict ok'), 'missing');
   for (const v of ['allow', 'deny', 'permit', 'forbid', 'blocked', 'hitl', 'approval_required', 'held']) assert.equal(d(`decision=${v}`), 'met', `decision=${v}`);
   assert.equal(d('decision=pending'), 'partial');

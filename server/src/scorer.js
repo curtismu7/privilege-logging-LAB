@@ -95,8 +95,7 @@ function factsOf(line) {
   if (i >= 0) add('decision', 'partial', 'guardrail verdict, no authorization decision line', i, i + 'aiguard: blocked'.length);
   i = at('auth rejected');
   if (i >= 0) add('decision', 'partial', 'authentication refusal: says the call was rejected, not which policy decided', i, i + 'auth rejected'.length);
-  i = at('aiintent:');
-  if (i >= 0 && line.includes('unavailable')) add('decision', 'partial', 'intent signals unavailable: records that no intent verdict exists', i, i + 'aiintent:'.length);
+  // An "aiintent: ... unavailable" warning says the intent check could not run: it carries no allow or deny verdict, so it is no decision evidence.
 
   // 2. key=value pairs (logrus/logfmt), one linear pass.
   if (line.includes('=')) {

@@ -678,9 +678,11 @@
     "user": "na",
     "agent": "na",
     "tool": "na",
-    "decision": "partial"
+    "decision": "missing"
    },
-   "scoreNotes": {}
+   "scoreNotes": {
+    "decision": "The warning says the intent check could not run; it records no allow or deny verdict."
+   }
   }
  ]
 }
