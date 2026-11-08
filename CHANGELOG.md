@@ -2,7 +2,7 @@
 
 ## Unreleased (workload token)
 
-- Valid workload token: the lab mints the token itself (ES256, 300 s, key derived from `PRIV_LOG_FED_SIGNING_SEED`, audience from `PRIV_LOG_FED_AUDIENCE`). `npm run fed-key` makes the seed. The case card and `GET /api/fed-setup` show the public issuer, subject and JWKS, plus the console steps. A pasted token still overrides the minted one. Acceptance on a real door is UNVERIFIED.
+- Valid workload token: the lab mints the token itself (ES256, 300 s, key derived from `PRIV_LOG_FED_SIGNING_SEED`, audience from `PRIV_LOG_FED_AUDIENCE`). `npm run fed-key` makes the seed. The case card and `GET /api/fed-setup` show the public issuer, subject and JWKS, plus the console steps. A pasted token still overrides the minted one. Measured on a live gateway 2026-11-08: `workload token accepted`, call answered 200.
 
 ## Unreleased (bridge)
 
