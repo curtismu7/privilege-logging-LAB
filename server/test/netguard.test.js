@@ -9,8 +9,8 @@ import { allowedHosts, installNetguard, netguardSelfTest, setAllowedHosts } from
 test('self-test: every route out is refused and recorded, none reaches the network', async () => {
   const r = await netguardSelfTest();
   assert.equal(r.ok, true, r.detail);
-  assert.equal(r.blocked, 6);
-  assert.match(r.detail, /fetch: blocked.*socket: blocked.*socket-ip: blocked.*dns: blocked.*dns-resolve: blocked.*udp: blocked/);
+  assert.equal(r.blocked, 7);
+  assert.match(r.detail, /fetch: blocked.*socket: blocked.*socket-ip: blocked.*dns: blocked.*dns-resolve: blocked.*udp: blocked.*udp-connect: blocked/);
   installNetguard().restore();
 });
 
@@ -84,6 +84,21 @@ test('udp: the address is found by position, so a message body cannot masquerade
     assert.deepEqual(g.attempts.filter((a) => a.startsWith('udp:')), ['udp:evil.invalid', 'udp:evil2.invalid', 'udp:evil3.invalid']);
     s.send('plain message', 9, '127.0.0.1', () => {}); // a string body is fine for loopback
   } finally { s.close(); g.restore(); }
+});
+
+test('UDP connect: a connected socket cannot target a non-loopback host; loopback connect still works; restore puts connect back', async () => {
+  const orig = dgram.Socket.prototype.connect;
+  const g = installNetguard();
+  const s = dgram.createSocket('udp4');
+  try {
+    assert.throws(() => s.connect(9, '192.0.2.1'), /network blocked: 192\.0\.2\.1/);
+    assert.throws(() => s.connect(9, 'evil.invalid', () => {}), /network blocked: evil\.invalid/);
+    assert.throws(() => s.remoteAddress(), /not connected|ERR_SOCKET_DGRAM_NOT_CONNECTED/i);
+    assert.deepEqual(g.attempts.filter((a) => a.startsWith('udp:')), ['udp:192.0.2.1', 'udp:evil.invalid']);
+    await new Promise((res, rej) => { s.once('error', rej); s.connect(9, '127.0.0.1', res); });
+    assert.equal(s.remoteAddress().address, '127.0.0.1');
+  } finally { s.close(); g.restore(); }
+  assert.equal(dgram.Socket.prototype.connect, orig);
 });
 
 test('Real mode allow-list: a configured host name passes the guard, anything else is still refused, [] closes the door again', async () => {

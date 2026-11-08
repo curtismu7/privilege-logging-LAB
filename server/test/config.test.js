@@ -60,7 +60,10 @@ test('launch mode: Real if configured else Mock; MODE=real without settings is r
 
 test('safety: private/reserved address detection, port, bind, and host scan', () => {
   for (const a of ['10.1.2.3', '172.16.0.1', '192.168.0.9', '169.254.169.254', '100.64.0.1', '127.0.0.1', '0.0.0.0', '::1', 'fd12::1', 'fe80::1', '::ffff:10.0.0.1']) assert.equal(isPrivateAddress(a), true, a);
-  for (const a of ['8.8.8.8', '1.1.1.1', '2001:db8::1', 'gateway.example']) assert.equal(isPrivateAddress(a), false, a);
+  for (const a of ['8.8.8.8', '1.1.1.1', '2001:db8::1', 'gateway.example', '2606:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPrivateAddress(a), false, a);
+  // IPv6 forms that carry or stand for a private IPv4, or are reserved: 6to4, IPv4-compatible (both spellings), site-local, Teredo, NAT64, ::
+  for (const a of ['2002:a9fe:a9fe::1', '[2002:a9fe:a9fe::1]', '::a9fe:a9fe', '::7f00:1', '::127.0.0.1', '::169.254.169.254', 'fec0::1', 'feff::1', '2001::a9fe:a9fe', '2001:0:a9fe::1', '64:ff9b::a9fe:a9fe', '::', '::ffff:a9fe:a9fe', 'fe80::1%en0', '1:2:3:4:5:6:7:8:9', 'zz::1']) assert.equal(isPrivateAddress(a), true, a);
+  for (const u of ['https://[2002:a9fe:a9fe::1]/', 'https://[::a9fe:a9fe]/', 'https://[::127.0.0.1]/', 'https://[fec0::1]/', 'https://[2001::a9fe:a9fe]/']) assert.equal(isPrivateAddress(new URL(u).hostname), true, u);
   assert.equal(portProblem(7801), null);
   for (const p of [7800, 7802, 8080, 5173, 80, 'x']) assert.ok(portProblem(p), String(p));
   assert.equal(resolvePort({}), 7801);

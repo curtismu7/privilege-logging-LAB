@@ -114,6 +114,27 @@ export function isPrivateAddress(ip) {
   }
   if (!text.includes(':')) return false; // a name, not an address
   if (text === '::' || text === '::1') return true;
-  const first = parseInt(text.split(':')[0] || '0', 16);
-  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xff00) === 0xff00 || text.startsWith('64:ff9b:') || text.startsWith('::ffff:');
+  const g = v6groups(text);
+  if (!g) return true; // not a parsable IPv6 literal: refuse rather than guess
+  const [first, second] = g;
+  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xffc0) === 0xfec0 || (first & 0xff00) === 0xff00
+    || (first === 0x64 && second === 0xff9b) // NAT64
+    || first === 0x2002 // 6to4: carries an IPv4 address (2002:a9fe:a9fe:: is 169.254.169.254); deprecated, refused outright
+    || (first === 0x2001 && second === 0) // Teredo
+    || g.slice(0, 5).every((n) => n === 0); // ::/80: IPv4-compatible (::a9fe:a9fe), IPv4-mapped (::ffff:...) and ::, ::1
+}
+// Eight 16-bit groups of an IPv6 literal (with :: expanded and a dotted IPv4 tail converted), or null when it does not parse.
+function v6groups(text) {
+  let t = text;
+  const tail = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(t);
+  if (tail) { const q = v4(tail[2]); if (!q) return null; t = `${tail[1]}${((q[0] << 8) | q[1]).toString(16)}:${((q[2] << 8) | q[3]).toString(16)}`; }
+  const halves = t.split('::');
+  if (halves.length > 2) return null;
+  const part = (s) => (s ? s.split(':') : []);
+  const head = part(halves[0]); const rest = halves.length === 2 ? part(halves[1]) : [];
+  const fill = halves.length === 2 ? 8 - head.length - rest.length : 0;
+  if (fill < 0 || (halves.length === 2 && fill < 1)) return null;
+  const all = [...head, ...Array(fill).fill('0'), ...rest];
+  if (all.length !== 8 || !all.every((x) => /^[0-9a-f]{1,4}$/.test(x))) return null;
+  return all.map((x) => parseInt(x, 16));
 }

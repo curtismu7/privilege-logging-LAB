@@ -33,7 +33,8 @@ export function createApp({
   app.disable('x-powered-by');
   app.use(hostCheck);
   app.use(sameOriginWrites);
-  app.use((_req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next(); });
+  // No framing by any page (click-jacking the Mock/Real toggle, Confirm and Run): nothing in the family embeds this app.
+  app.use((_req, res, next) => { res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "frame-ancestors 'none'" }); next(); });
 
   const settingsOpts = { file: useSettingsFile };
   const cfg = () => realConfig(env, settingsOpts); // read on every call: editing the settings file shows up without a restart
