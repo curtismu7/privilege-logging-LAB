@@ -104,7 +104,8 @@ test('Mock replays all 17 cases with the recorded response, lines and score, and
         assert.equal(body.retrieval.state, 'found'); assert.equal(body.retrieval.method, 'recorded');
         assert.deepEqual(body.score, c.score);
         assert.deepEqual(body.outcome, c.outcome);
-        assert.deepEqual(body.logged.map(({ methods, ...l }) => l), c.logged);
+        assert.deepEqual(body.logged.map(({ methods, kinds, ...l }) => l), c.logged);
+        assert.ok(body.logged.every((l) => Array.isArray(l.kinds) && l.kinds.length === l.lines.length && l.kinds.every((k) => ['runtime', 'console', 'unknown'].includes(k))), 'every recorded line says console or runtime');
         assert.ok(body.hops.length === 2 && body.hops.every((h) => /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/.test(h.traceparent)));
         assert.match(body.hops[1].request, /NOT sent/);
       }

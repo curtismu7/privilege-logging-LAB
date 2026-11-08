@@ -136,3 +136,10 @@ button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:h
 .jt__str mark { color: inherit; }
 .jt__raw { max-height: 24rem; overflow: auto; }
 .jt__row .fbadge { margin-left: 0.5rem; }
+
+.mono { font-family: var(--font-mono); font-size: 0.85em; overflow-wrap: anywhere; }
+
+.channel { margin: 0.25rem 0 0.4rem; padding: 0.3rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.02em; border: 1px solid var(--border); }
+.channel--privilege-es { background: var(--ok-bg, rgba(46, 160, 67, 0.15)); border-color: var(--ok, #2ea043); }
+.channel--pod { background: var(--warn-bg, rgba(210, 153, 34, 0.15)); border-color: var(--warn, #d29922); }
+.priv-filters { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; margin: 0.5rem 0; }

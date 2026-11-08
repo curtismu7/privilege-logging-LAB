@@ -87,8 +87,19 @@ In `~/Development/.env` (or the file named by `STANDALONE_ENV`; the environment 
 | `PRIV_LOG_K8S_NAMESPACE`, `PRIV_LOG_K8S_POD` | Both needed for the pod-log source. The pod is a name or a label selector (`app=name`). |
 | `PRIV_LOG_K8S_CONTAINER` | Container to read. Default `log-tailer`. |
 | `PRIV_LOG_BEARER_<CASEID>` | Optional per-case credential for the not-yet-measured cases that send one. Write-only. |
+| `PRIV_LOG_CONSOLE_URL`, `PRIV_LOG_CONSOLE_TENANT` | Optional, both needed. The Privilege console origin (for the local desktop console, the address the PingOne Privilege app opens in your browser) and the tenant id. Turns on the **Privilege logs** source and the **Privilege -> Elasticsearch** tab: Privilege's own hosted indices, read through the console's `elasticlog` API. The console host may resolve to loopback; no other name may. |
+| `PRIV_LOG_CONSOLE_CA` | Optional. A PEM file of the console's root CA (the local console chains to a tenant root the PingOne Privilege app installs in the keychain, which Node does not trust). Trusted for the console origin only. Export it with `security find-certificate -a -c TenantRoot -p /Library/Keychains/System.keychain`. |
 
-Not every case can be driven in Real: A2A, LLM and the intent-encoder case need routes this lab has not measured, so Real lists them as not runnable and you paste their log lines instead. The Rejected cases send no credential, a made-up key and a malformed token on purpose.
+Not every case can be driven in Real: A2A, LLM and the intent-encoder case need routes this lab has not measured, so Real lists them as not runnable and you paste their log lines instead. The Rejected cases, and the four bad federated-token cases, use a bad credential the lab generates itself (a made-up key, a malformed token, or a JWT with one wrong claim on `.invalid` hosts); you never paste one. A revoked, expired or rate-limited key cannot be generated: those need a real key in that state.
+
+## Where an entry came from: console vs runtime
+
+Every entry is labelled twice:
+
+- **Channel** (a badge on each sink): `GATEWAY POD LOG` (read with kubectl, not from Privilege), `PRIVILEGE -> ELASTICSEARCH` (what Privilege itself wrote), or another source (our OpenSearch sidecar, the response header, pasted lines).
+- **Kind**: a **runtime event** is something the gateway did with traffic (a call, a policy decision, a guardrail verdict, an approval hold); a **console event** is an admin change in the Privilege console. Privilege's hosted indices decide it: `policy-decision-log`, `aiguard-log`, `proxy-audit-log`, `agent-approval-log`, `proxy-event-log` are runtime; `audit-log`, `event-log` are console. In a SIEM index a console event has a top-level `Module` and a string `Data`.
+
+The **Privilege -> Elasticsearch** tab shows only Privilege's own entries for a time range, filterable by kind and index. Privilege's logs carry keys in full (an `aiguard-log` `VirtualKeyID`, an agent save's provider `RealKey` in `audit-log`); the lab shows only their first 8 and last 4 characters, and never shows the console's raw base64 answer.
 
 ## How the scorer decides (a pure function, `server/src/scorer.js`)
 

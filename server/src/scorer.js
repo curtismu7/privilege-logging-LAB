@@ -23,8 +23,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LONGHEX = /^[0-9a-f]{24,64}$/i;
 
 const USER_KEYS = new Set(['user', 'userid', 'user_id', 'username', 'sub', 'principal', 'upn', 'custodian']);
-const AGENT_KEYS = new Set(['client', 'clientid', 'client_id', 'agent', 'agentid', 'agent_id', 'actor', 'act', 'keyname', 'key_name']);
-const TOOL_KEYS = new Set(['tool', 'toolname', 'tool_name', 'target_tool']);
+const AGENT_KEYS = new Set(['client', 'clientid', 'client_id', 'agent', 'agentid', 'agent_id', 'actor', 'act', 'keyname', 'key_name', 'agentkey']);
+// target: the tool on a Privilege policy decision record (Data.Target).
+const TOOL_KEYS = new Set(['tool', 'toolname', 'tool_name', 'target_tool', 'target']);
 const DECISION_KEYS = new Set(['decision', 'policy_decision', 'policydecision', 'verdict', 'authz', 'authorization_decision', 'allowed', 'effect']);
 
 // True when a client value names an OAuth client rather than an agent or key: a UUID, a long hex id, or a placeholder/name that says "oauth".
@@ -128,7 +129,7 @@ function factsOf(line) {
     else if (DECISION_KEYS.has(key)) {
       const d = clean(v).toLowerCase();
       if (EMPTY.has(d)) return;
-      add('decision', /^(allow|allowed|deny|denied|permit|permitted|forbid|forbidden|block|blocked|true|false|permit_|deny_)/.test(d) ? 'met' : 'partial', why, start, end);
+      add('decision', /^(allow|allowed|deny|denied|permit|permitted|forbid|forbidden|block|blocked|true|false|permit_|deny_|hitl|approval_required|held)/.test(d) ? 'met' : 'partial', why, start, end);
     } else if (key === 'event' && /(blocked|denied|rejected|forbidden)/i.test(v.slice(0, 80))) add('decision', 'met', `${via} event ${v.slice(0, 40)}: a block event`, start, end);
   }
 

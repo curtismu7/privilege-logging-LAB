@@ -1,0 +1,40 @@
+{
+ "channel": "Privilege -> Elasticsearch (Privilege hosted), read through the console",
+ "recordedOn": "2026-11-07",
+ "note": "Recorded sample: the five policy decision records Privilege wrote for our approval and block tests on 2026-11-07, values replaced by placeholders. Only these were measured; the other Privilege indices are read in Real mode.",
+ "from": "2026-11-07T22:15:00.000Z",
+ "to": "2026-11-07T22:17:00.000Z",
+ "truncated": false,
+ "entries": [
+  {
+   "index": "policy-decision-log",
+   "kind": "runtime",
+   "at": "2026-11-07T22:16:54.933Z",
+   "text": "{\"@timestamp\":\"2026-11-07T22:16:54.933Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_approval_required\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\",\"InstructionID\":\"<instruction-id>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+  },
+  {
+   "index": "policy-decision-log",
+   "kind": "runtime",
+   "at": "2026-11-07T22:16:53.990Z",
+   "text": "{\"@timestamp\":\"2026-11-07T22:16:53.990Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_decision\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+  },
+  {
+   "index": "policy-decision-log",
+   "kind": "runtime",
+   "at": "2026-11-07T22:16:43.449Z",
+   "text": "{\"@timestamp\":\"2026-11-07T22:16:43.449Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_approval_required\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\",\"InstructionID\":\"<instruction-id>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+  },
+  {
+   "index": "policy-decision-log",
+   "kind": "runtime",
+   "at": "2026-11-07T22:16:43.137Z",
+   "text": "{\"@timestamp\":\"2026-11-07T22:16:43.137Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_decision\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+  },
+  {
+   "index": "policy-decision-log",
+   "kind": "runtime",
+   "at": "2026-11-07T22:15:52.045Z",
+   "text": "{\"@timestamp\":\"2026-11-07T22:15:52.045Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"deny\",\"Event\":\"policy_decision\",\"Flow\":\"mcp\",\"GrantShape\":\"transaction\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-block-generic-api:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"this tool can call any search API endpoint - blocked outright, no approval path\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"GenericOpenSearchApiTool\",\"User\":\"<user-uuid>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+  }
+ ]
+}

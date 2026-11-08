@@ -18,7 +18,10 @@ export class RealError extends Error {
 
 export const LIMITS = { timeoutMs: 8000, maxBytes: 262_144, maxRequestBytes: 16_384 };
 
-export function createRealClient({ origins, secrets = [], lookup = dns.lookup, timeoutMs = LIMITS.timeoutMs, maxBytes = LIMITS.maxBytes, now = Date.now } = {}) {
+// loopbackNames: host names the owner configured that may resolve to LOOPBACK only (the local Privilege console's name, which resolves to 127.0.0.1). Any
+// other private or reserved answer is still refused for them, and every other name keeps the full guard.
+export function createRealClient({ origins, secrets = [], lookup = dns.lookup, timeoutMs = LIMITS.timeoutMs, maxBytes = LIMITS.maxBytes, now = Date.now, loopbackNames = [], caByHost = {} } = {}) {
+  const loopNames = new Set(loopbackNames.map((h) => String(h).toLowerCase()));
   const allowed = new Set(origins);
   const secretList = secrets.filter((s) => typeof s === 'string' && s.length >= 4);
   const redact = (text) => secretList.reduce((t, s) => t.split(s).join('***'), String(text));
@@ -31,7 +34,8 @@ export function createRealClient({ origins, secrets = [], lookup = dns.lookup, t
       if (err) return done(err);
       const list = Array.isArray(addrs) ? addrs : [{ address: addrs, family: 4 }];
       if (!list.length) return done(new RealError('no_address', `no address for ${hostname}`));
-      if (!isLoopbackHost(hostname) && list.some((a) => isPrivateAddress(a.address))) return done(new RealError('blocked_address', `${hostname} resolves to a private or reserved address`, 403));
+      const namedLoop = loopNames.has(String(hostname).toLowerCase()) && list.every((a) => isLoopbackHost(a.address));
+      if (!isLoopbackHost(hostname) && !namedLoop && list.some((a) => isPrivateAddress(a.address))) return done(new RealError('blocked_address', `${hostname} resolves to a private or reserved address`, 403));
       return opts && opts.all ? done(null, list) : done(null, list[0].address, list[0].family);
     });
   };
@@ -54,6 +58,7 @@ export function createRealClient({ origins, secrets = [], lookup = dns.lookup, t
       const finish = (fn, v) => { if (settled) return; settled = true; clearTimeout(timer); fn(v); };
       const req = lib.request({
         protocol: u.protocol, hostname: u.hostname.replace(/^\[|\]$/g, ''), port: u.port || undefined, path: u.pathname + u.search, method, lookup: guardedLookup, agent: false,
+        ...(u.protocol === 'https:' && Object.hasOwn(caByHost, u.hostname) ? { ca: caByHost[u.hostname] } : {}),
         headers: { ...headers, ...(payload ? { 'content-length': String(payload.length) } : {}), connection: 'close' },
       }, (res) => {
         const chunks = []; let size = 0; let truncated = false;

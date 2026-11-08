@@ -61,7 +61,11 @@ export default function TracePage({ cases, runs, sinkInfo, info, caseId, busy = 
       <div className="row">
         <label htmlFor="trace-case" className="inline">Use case{" "}
           <select id="trace-case" value={caseId || ""} onChange={(e) => onSelect(e.target.value)} data-testid="trace-case">
-            {cases.cases.map((c) => <option key={c.id} value={c.id}>{c.group}: {c.title}{runs[c.id] ? "" : " (not run)"}</option>)}
+            {[["happy", "Happy path"], ["failure", "Failures"]].map(([p, label]) => (
+              <optgroup key={p} label={label}>
+                {cases.cases.filter((c) => c.path === p).map((c) => <option key={c.id} value={c.id}>{c.group}: {c.title}{runs[c.id] ? "" : " (not run)"}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
         <button type="button" className="primary" onClick={() => onRun(caseId)} disabled={!!running || !caseId} data-testid="trace-run">{result ? "Run again" : "Run this case"}</button>
@@ -96,12 +100,21 @@ export default function TracePage({ cases, runs, sinkInfo, info, caseId, busy = 
           </div>
 
           <h2 className="section-label">What was logged, per sink</h2>
+          <p className="muted" data-testid="kind-legend"><b>Runtime event</b>: something the gateway did with traffic (a call, a policy decision, a guardrail verdict, an approval hold). <b>Console event</b>: an admin change made in the Privilege console. Each entry is labelled.</p>
           {result.logged.map((l) => {
             const s = sinkName(l.source);
+            const o = l.origin;
+            const fromName = o ? o.system : (s?.name || l.source);
             return (
               <section key={l.source} className="card card--sink" data-testid={`sink-${l.source}`} aria-label={s?.name || l.source}>
                 <h3 className="card__title">{s?.name || l.source} <Chip kind={l.lines.length ? "ok" : "warn"}>{l.lines.length ? `${l.lines.length} line${l.lines.length === 1 ? "" : "s"}` : "nothing logged"}</Chip>{s?.unverified && <> <Chip kind="warn">UNVERIFIED</Chip></>}</h3>
-                {l.lines.length > 0 ? <LogEntries lines={l.lines} methods={l.methods || []} marks={result.marks?.[l.source] || {}} testId={`lines-${l.source}`} scored={result.scored} /> : !l.note && <p className="muted">Nothing was found in this sink for the call.</p>}
+                {sinkInfo?.channels?.[l.source] && <p className={`channel channel--${sinkInfo.channels[l.source].channel}`} data-testid={`channel-${l.source}`}>{sinkInfo.channels[l.source].channel === "privilege-es" ? "PRIVILEGE -> ELASTICSEARCH" : sinkInfo.channels[l.source].channel === "pod" ? "GATEWAY POD LOG" : "OTHER SOURCE"}: {sinkInfo.channels[l.source].label}</p>}
+                <p className="muted" data-testid={`origin-${l.source}`}>
+                  {o ? <><Chip kind="ok">Live read</Chip> {visible(o.system)}{o.where ? <> · <span className="mono">{visible(o.where)}</span></> : null}</>
+                    : l.source === "pasted" ? <Chip kind="neutral">Pasted by you</Chip>
+                    : <><Chip kind="info">Recorded sample</Chip> {visible(s?.name || l.source)}{result.recordedOn ? ` · recorded ${result.recordedOn}` : ""}</>}
+                </p>
+                {l.lines.length > 0 ? <LogEntries from={fromName} kinds={l.kinds || []} indices={l.indices || []} lines={l.lines} methods={l.methods || []} marks={result.marks?.[l.source] || {}} testId={`lines-${l.source}`} scored={result.scored} /> : !l.note && <p className="muted">Nothing was found in this sink for the call.</p>}
                 {l.note && <p className="muted">{visible(l.note)}</p>}
               </section>
             );

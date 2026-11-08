@@ -14,7 +14,7 @@ export const TIGHT_MS = 1500;         // around a marker line
 export const MAX_SOURCE_LINES = 5000;
 export const MAX_SHOWN = 200;
 
-const APP_TOKEN = /(?:path=\/|\bapp=|Application |access to |\{Application )([a-z0-9][a-z0-9-]{0,47})/g;
+const APP_TOKEN = /(?:path=\/|\bapp=|Application |access to |\{Application |"App":"|"Path":"\/)([a-z0-9][a-z0-9-]{0,47})/g;
 
 // Names of apps a line mentions. Linear, anchored on literal prefixes.
 export function appsIn(text) {
@@ -33,7 +33,9 @@ export function parseTs(text) {
   return { ts: null, rest: t };
 }
 
-// lines: [{ text, ts|null }] in log order. Returns { lines: [{ text, method }], state, markerLines, windowLines, ignored }.
+const keep = (l, method) => ({ text: l.text, method, ...(l.kind ? { kind: l.kind } : {}), ...(l.index ? { index: l.index } : {}) });
+
+// lines: [{ text, ts|null, kind?, index? }] in log order. Returns { lines: [{ text, method }], state, markerLines, windowLines, ignored }.
 //   state: 'marker' | 'window' | 'none'
 export function matchEntry({ lines, marker, t0, t1, app = null, rejected = false, windowAllowed = false, since = null }) {
   const input = lines.slice(-MAX_SOURCE_LINES);
@@ -48,14 +50,14 @@ export function matchEntry({ lines, marker, t0, t1, app = null, rejected = false
     const anchors = markerHits.map((i) => input[i].ts).filter((x) => x !== null);
     const out = [];
     input.forEach((l, i) => {
-      if (markerHits.includes(i)) out.push({ text: l.text, method: 'marker' });
-      else if (inWindow(l) && !otherApp(l) && anchors.some((a) => Math.abs(l.ts - a) <= TIGHT_MS)) out.push({ text: l.text, method: 'window' });
+      if (markerHits.includes(i)) out.push(keep(l, 'marker'));
+      else if (inWindow(l) && !otherApp(l) && anchors.some((a) => Math.abs(l.ts - a) <= TIGHT_MS)) out.push(keep(l, 'window'));
     });
     const shown = out.slice(0, MAX_SHOWN);
     return { state: 'marker', lines: shown, markerLines: markerHits.length, windowLines: shown.filter((x) => x.method === 'window').length, ignored: input.length - shown.length };
   }
   if (!windowAllowed) return { state: 'none', lines: [], markerLines: 0, windowLines: 0, ignored: input.length };
   const cand = input.filter((l) => inWindow(l) && !otherApp(l) && (!rejected || namesApp(l)));
-  const shown = cand.slice(0, MAX_SHOWN).map((l) => ({ text: l.text, method: 'window' }));
+  const shown = cand.slice(0, MAX_SHOWN).map((l) => keep(l, 'window'));
   return { state: shown.length ? 'window' : 'none', lines: shown, markerLines: 0, windowLines: shown.length, ignored: input.length - shown.length };
 }

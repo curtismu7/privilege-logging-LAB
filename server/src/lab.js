@@ -3,15 +3,21 @@ import { randomBytes } from 'node:crypto';
 import { FIELDS } from './capture.js';
 import { scoreLines, diffScores } from './scorer.js';
 import { newTrace, formatTraceparent } from './trace.js';
-import { makeMarker, notRunnable, rpcFor, rpcWithMarker, runMcp } from './mcpRunner.js';
+import { GENERATED, makeMarker, notRunnable, rpcFor, rpcWithMarker, runMcp } from './mcpRunner.js';
 import { matchEntry } from './matcher.js';
 import { redactLine } from './redact.js';
 import { readSource, sourcesFrom } from './logSources.js';
 import { RealError } from './realClient.js';
+import { SINK_KIND, kindOf } from './eventKind.js';
+
+// Console or runtime per line: the line's own kind when the reader decided it, else the sink's kind, else unknown.
+export const withKinds = (l) => ({ ...l, kinds: l.lines.map((_, i) => l.kinds?.[i] || SINK_KIND[l.source] || 'unknown') });
 
 // The sinks the Real mode can add on top of the five measured ones.
 export const EXTRA_SINKS = [
-  { id: 'search', name: 'Your search endpoint (PRIV_LOG_SEARCH_URL)', summary: 'Events read back from the search endpoint you configured, for the time window of the call. Whatever else was logged in that window is included.' },
+  { id: 'k8s-pod', name: 'Privilege gateway pod log (live, via kubectl proxy)', summary: 'The gateway pod\'s own log, read live through kubectl proxy for the time window of the call. Whatever else the pod logged in that window is included.' },
+  { id: 'privilege-hosted', name: 'Privilege logs (live, through the Privilege console)', summary: 'Privilege\'s own hosted logs, read through the console\'s elasticlog API for the time window of the call. Runtime: policy-decision-log (user, agent key, tool, decision), aiguard-log, proxy-audit-log, agent-approval-log, proxy-event-log. Console: audit-log, event-log. Each entry says which index and which kind it is. Matched to the call by time window and app (inferred).' },
+  { id: 'search', name: 'Search endpoint: Elasticsearch / OpenSearch (live)', summary: 'Events read back from the search endpoint you configured, for the time window of the call. Whatever else was logged in that window is included.' },
   { id: 'pasted', name: 'Pasted log lines', summary: 'Lines you pasted into the paste box. Scored with the same scorer as every other line.' },
 ];
 
@@ -19,12 +25,23 @@ export const naFields = (c) => FIELDS.filter((f) => c.score?.[f] === 'na');
 
 export const REAL_ONLY_NOTE = 'No recorded measurement yet. Real mode only.';
 
+// The use-case dropdown groups cases into the happy path (the call is meant to succeed) and failures (refused, blocked, rejected, held or broken).
+export const HAPPY_PATH = new Set(['mcp-allowed-user', 'mcp-allowed-key', 'mcp-list-filtered', 'aggregate-allowed', 'llm-allowed', 'fed-valid-token', 'approval-approved', 'reg-key-created', 'reg-key-rotated']);
+
+// Where a live log entry was read from: the system, and the exact place (so two instances that differ only by namespace or index are told apart).
+export function originOf(src, cfg) {
+  if (src.id === 'k8s-pod' && cfg.k8s) return { live: true, system: 'Privilege gateway pod log', where: `namespace ${cfg.k8s.namespace}, ${cfg.k8s.pod ? `pod ${cfg.k8s.pod}` : `pods ${cfg.k8s.selector}`}, container ${cfg.k8s.container}, via ${cfg.k8s.origin}` };
+  if (src.id === 'search' && cfg.search) return { live: true, system: 'Elasticsearch / OpenSearch', where: `${cfg.search.origin}, index ${cfg.index}` };
+  if (src.id === 'privilege-hosted' && cfg.decisions) return { live: true, system: 'Privilege logs (hosted Elasticsearch)', where: `read through the Privilege console ${cfg.decisions.origin} (elasticlog)` };
+  return { live: true, system: src.label, where: src.origin || '' };
+}
+
 export function caseSummary(c, { bearerConfigured = false } = {}) {
   const why = notRunnable(c);
   return {
     id: c.id, group: c.group, title: c.title, identity: c.identity, request: c.request, realRunnable: why === null, realNote: why,
     realOnly: c.realOnly === true, needs: c.needs || [], consoleAction: c.consoleAction === true, heldCall: c.heldCall === true,
-    needsBearer: c.request.auth === 'bearer', bearerConfigured, mockNote: c.realOnly ? REAL_ONLY_NOTE : null,
+    needsBearer: c.request.auth === 'bearer' && !GENERATED[c.id], generatedCredential: GENERATED[c.id] || null, path: HAPPY_PATH.has(c.id) ? 'happy' : 'failure', bearerConfigured, mockNote: c.realOnly ? REAL_ONLY_NOTE : null,
   };
 }
 
@@ -64,7 +81,7 @@ export function mockRun(c, capture, { rand = randomBytes } = {}) {
   return {
     caseId: c.id, group: c.group, title: c.title, identity: c.identity, source: 'mock', ranAt: null, recordedOn: capture.capturedOn,
     request: c.request, wire, outcome: c.outcome, response: { http: c.outcome.http, note: c.outcome.note },
-    logged: c.logged, marks: marksFor(c.logged, ctx), score: c.score, scoreNotes: c.scoreNotes,
+    logged: c.logged.map(withKinds), marks: marksFor(c.logged, ctx), score: c.score, scoreNotes: c.scoreNotes,
     recomputed: { score: r.score, diff: diffScores(c.score, r.score) }, scored: true, needsPaste: false,
     traceId: trace.traceId,
     hops: [
@@ -122,7 +139,7 @@ export async function realSend(c, { client, cfg, bearer, now = Date.now, rand = 
   const mcp = await runMcp({ client, gatewayUrl: cfg.gateway.url.href, key: cfg.key, bearer, c, trace, marker });
   const t1 = now();
   const logged = [];
-  if (mcp.auditHeader) logged.push({ source: 'response', lines: [mcp.auditHeader], methods: ['response'], note: 'X-Gw-Audit-Trail header as returned to the caller (UNVERIFIED format).' });
+  if (mcp.auditHeader) logged.push(withKinds({ source: 'response', lines: [mcp.auditHeader], methods: ['response'], note: 'X-Gw-Audit-Trail header as returned to the caller (UNVERIFIED format).', origin: { live: true, system: 'Gateway response header', where: 'X-Gw-Audit-Trail, returned to the caller (not stored)' } }));
   return {
     ...base, ranAt: new Date(t1).toISOString(), wire: mcpWire(c, marker), outcome: mcp.outcome, response: { http: mcp.outcome.http, note: mcp.outcome.note }, logged,
     marker, markerWhere: mcp.markerWhere, timing: { sentAt: t0, receivedAt: t1, since: null }, hops: mcp.hops.map((h, i) => textHop(h, i + 1)), needsPaste: !sources.length,
@@ -175,7 +192,7 @@ export async function fetchAttempt(run, c, { client, cfg, now = Date.now, limits
     const m = matchEntry({ lines: r.lines, marker: run.marker, t0: sentAt, t1: receivedAt, app, rejected: run.group === 'Rejected', windowAllowed, since });
     markerLines += m.markerLines; windowLines += m.windowLines; ignored += m.ignored;
     if (m.lines.length) {
-      logged.push({ source: r.src.id, lines: m.lines.map((x) => x.text), methods: m.lines.map((x) => x.method), note: matchNote(m, r, run) });
+      logged.push(withKinds({ source: r.src.id, lines: m.lines.map((x) => x.text), methods: m.lines.map((x) => x.method), kinds: m.lines.map((x) => x.kind || null), indices: m.lines.map((x) => x.index || null), note: matchNote(m, r, run), origin: originOf(r.src, cfg) }));
       if (m.state === 'marker') method = 'marker'; else if (!method) method = 'window';
     }
   }
@@ -207,7 +224,7 @@ function matchNote(m, r, run) {
 export function scorePasted(lines, c) {
   const ctx = { na: c ? naFields(c) : [] };
   const r = scoreLines(lines, ctx);
-  const logged = [{ source: 'pasted', lines: lines.slice(0, 500), note: 'Lines you pasted.' }];
+  const logged = [withKinds({ source: 'pasted', lines: lines.slice(0, 500), kinds: lines.slice(0, 500).map((t) => kindOf({ text: t })), note: 'Lines you pasted.' })];
   return { score: r.score, scoreNotes: noteFrom(r), evidence: r.evidence, marks: marksFor(logged, ctx), lines: r.lines, truncated: r.truncated, logged };
 }
 
@@ -246,7 +263,7 @@ export function toMarkdown(rows, { source, capturedOn, requirement }) {
 // Attach pasted lines to a Real run: the run keeps its other sinks, gets (or replaces) the pasted sink, and is scored from everything.
 export function attachPasted(run, c, pastedLines) {
   const ctx = { na: naFields(c) };
-  const logged = [...run.logged.filter((l) => l.source !== 'pasted'), { source: 'pasted', lines: pastedLines.slice(0, 500), note: 'Lines you pasted.' }];
+  const logged = [...run.logged.filter((l) => l.source !== 'pasted'), withKinds({ source: 'pasted', lines: pastedLines.slice(0, 500), kinds: pastedLines.slice(0, 500).map((t) => kindOf({ text: t })), note: 'Lines you pasted.' })];
   const r = scoreLines(allLines(logged), ctx);
   return { ...run, logged, marks: marksFor(logged, ctx), score: r.score, scoreNotes: noteFrom(r), scored: true, needsPaste: false };
 }

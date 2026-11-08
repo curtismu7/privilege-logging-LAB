@@ -12,7 +12,9 @@ const SHOW = 50;
 
 // The lines one sink returned, each as a coloured JSON tree (logrus text and JSON records parsed; anything else one string node),
 // tagged with HOW it was matched to the call, and a list of the requirement fields this entry does not contain.
-export default function LogEntries({ lines, methods = [], marks = {}, testId = "lines", scored = true }) {
+const KIND = { runtime: ["ok", "runtime event"], console: ["info", "console event"], unknown: ["neutral", "kind unknown"] };
+
+export default function LogEntries({ lines, methods = [], marks = {}, testId = "lines", scored = true, from = "", kinds = [], indices = [] }) {
   const [all, setAll] = useState(false);
   const parsed = useMemo(() => lines.map((l) => parseLogLine(l)), [lines]);
   if (!lines.length) return null;
@@ -31,6 +33,8 @@ export default function LogEntries({ lines, methods = [], marks = {}, testId = "
             <li key={i} className="entry" data-testid="entry-item" data-method={methods[i] || undefined}>
               <div className="entry__head">
                 <span className="muted">#{i + 1} · {parsed[i].kind === "text" ? "text" : parsed[i].kind}</span>
+                {from && <Chip kind="neutral" testId="entry-from">from: {from}{indices[i] ? ` · ${indices[i]}` : ""}</Chip>}
+                {kinds[i] && <Chip kind={(KIND[kinds[i]] || KIND.unknown)[0]} testId="entry-kind">{(KIND[kinds[i]] || KIND.unknown)[1]}</Chip>}
                 {word && <Chip kind={kind} testId="entry-method">{word}</Chip>}
                 {fs.map((f) => <span key={f.field} className="ltag"><span className="ltag__name">{FIELD_LABEL[f.field]}</span> <LevelChip level={f.level} /></span>)}
               </div>

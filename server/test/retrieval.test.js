@@ -28,6 +28,8 @@ test('marker first: the run marker is found in the pod log, neighbours by window
       assert.equal(final.retrieval.state, 'found'); assert.equal(final.retrieval.method, 'marker');
       assert.ok(polls >= 1);
       const sink = final.logged.find((l) => l.source === 'k8s-pod');
+      assert.equal(sink.origin.live, true); assert.equal(sink.origin.system, 'Privilege gateway pod log');
+      assert.match(sink.origin.where, /namespace \S+, pods? \S+, container \S+, via http:\/\/127\.0\.0\.1:\d+/, 'a live entry names the namespace, pod, container and proxy it came from');
       assert.ok(sink.methods.includes('marker'), 'the payload line carries the marker');
       assert.ok(sink.methods.includes('window'), 'neighbours are matched by window');
       assert.ok(sink.lines.some((l) => l.includes(final.marker)));

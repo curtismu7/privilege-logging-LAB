@@ -1,20 +1,22 @@
 // Settings for Real mode (rule 19). Read from the shared settings file (~/Development/.env, STANDALONE_ENV overrides the path) and
 // from the process environment (the environment wins). Names: PRIV_LOG_GATEWAY_URL, PRIV_LOG_AGENT_KEY (write-only), PRIV_LOG_SEARCH_URL,
 // PRIV_LOG_SEARCH_INDEX, and for the Kubernetes pod-log reader (through `kubectl proxy`): PRIV_LOG_K8S_PROXY_URL, PRIV_LOG_K8S_NAMESPACE,
-// PRIV_LOG_K8S_POD, PRIV_LOG_K8S_CONTAINER. Real needs the gateway URL and the key; the log sources are optional (without any, the user pastes log lines).
+// PRIV_LOG_K8S_POD, PRIV_LOG_K8S_CONTAINER, and for the policy decision log (read through the Privilege console's elasticlog API):
+// PRIV_LOG_CONSOLE_URL, PRIV_LOG_CONSOLE_TENANT. Real needs the gateway URL and the key; the log sources are optional (without any, the user pastes log lines).
 // The key is only ever read here and handed to the Real client; no function in this file returns it to an API.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isLoopbackHost, isPrivateAddress } from './safety.js';
 
-export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER'];
+export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER', 'PRIV_LOG_CONSOLE_URL', 'PRIV_LOG_CONSOLE_TENANT', 'PRIV_LOG_CONSOLE_CA'];
 export const DEFAULT_K8S_PROXY = 'http://127.0.0.1:8001';
 export const DEFAULT_K8S_CONTAINER = 'log-tailer';
 // A Kubernetes object name (RFC 1123 subdomain) or a label selector such as app=privilege-gateway,tier=gw.
 const K8S_NAME = /^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$/;
 const K8S_SELECTOR = /^[A-Za-z0-9._\/-]{1,63}(=|!=|==)[A-Za-z0-9._-]{1,63}(,[A-Za-z0-9._\/-]{1,63}(=|!=|==)[A-Za-z0-9._-]{1,63}){0,4}$/;
 const MAX_VALUE = 2048;
+const TENANT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Per-case credentials only the owner has (a revoked key, a federated token): PRIV_LOG_BEARER_<CASEID>, id upper-cased, - as _. Write-only like the key.
 export const BEARER_NAME = /^PRIV_LOG_BEARER_[A-Z0-9_]{1,60}$/;
 export const isSettingName = (n) => SETTING_NAMES.includes(n) || BEARER_NAME.test(n);
@@ -94,7 +96,24 @@ export function realConfig(env = process.env, opts) {
     if (!K8S_NAME.test(container)) return bad('PRIV_LOG_K8S_CONTAINER is not a Kubernetes name');
     k8s = { url: px.url, origin: px.origin, host: px.host, namespace: s.PRIV_LOG_K8S_NAMESPACE, pod: selector ? null : s.PRIV_LOG_K8S_POD, selector: selector ? s.PRIV_LOG_K8S_POD : null, container };
   }
-  return { ok: true, gateway: gw, search: search || null, index, k8s, key: s.PRIV_LOG_AGENT_KEY };
+  // Policy decision log through the Privilege console (owner-run): POST <console>/api/<tenant>/v1/elasticlog. Configured when both are set.
+  let decisions = null;
+  if (s.PRIV_LOG_CONSOLE_URL || s.PRIV_LOG_CONSOLE_TENANT) {
+    const bad = (m) => ({ ok: false, problem: `Real is not configured: ${m}. Mock keeps working.` });
+    if (!s.PRIV_LOG_CONSOLE_URL || !s.PRIV_LOG_CONSOLE_TENANT) return bad('the decision-log source needs both PRIV_LOG_CONSOLE_URL and PRIV_LOG_CONSOLE_TENANT');
+    const cu = checkUrl(s.PRIV_LOG_CONSOLE_URL, { what: 'PRIV_LOG_CONSOLE_URL', allowPath: false });
+    if (cu.error) return bad(cu.error);
+    if (!TENANT.test(s.PRIV_LOG_CONSOLE_TENANT)) return bad('PRIV_LOG_CONSOLE_TENANT must be the tenant id (a UUID)');
+    // The local console's certificate chains to a tenant root the PingOne Privilege app installs in the keychain, which Node does not
+    // trust by default: PRIV_LOG_CONSOLE_CA names a PEM file of that root, trusted for the console origin ONLY.
+    let ca = null;
+    if (s.PRIV_LOG_CONSOLE_CA) {
+      try { ca = fs.readFileSync(s.PRIV_LOG_CONSOLE_CA.replace(/^~(?=\/)/, os.homedir()), 'utf8'); } catch { return bad('PRIV_LOG_CONSOLE_CA is not a readable file'); }
+      if (ca.length > 65_536 || !ca.includes('-----BEGIN CERTIFICATE-----')) return bad('PRIV_LOG_CONSOLE_CA must be a PEM certificate file');
+    }
+    decisions = { url: cu.url, origin: cu.origin, host: cu.host, tenant: s.PRIV_LOG_CONSOLE_TENANT.toLowerCase(), ca };
+  }
+  return { ok: true, gateway: gw, search: search || null, index, k8s, decisions, key: s.PRIV_LOG_AGENT_KEY };
 }
 
 // The bearer the owner set for a case in the environment or settings file, or undefined. Never returned by an API.

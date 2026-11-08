@@ -35,7 +35,7 @@ describe("Mock mode", () => {
     const real = screen.getByTestId("mode-real");
     expect(real).toBeDisabled();
     expect(real.getAttribute("title")).toMatch(/PRIV_LOG_GATEWAY_URL/);
-    for (const tab of ["trace", "scorecard", "sinks", "diagram", "talk", "run"]) {
+    for (const tab of ["trace", "privilege", "scorecard", "sinks", "diagram", "talk", "run"]) {
       await user.click(screen.getByTestId(`nav-${tab}`));
       expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
     }
@@ -64,6 +64,7 @@ describe("Mock mode", () => {
     await screen.findByTestId("run-page");
     await user.click(screen.getByTestId("run-all"));
     await waitFor(() => expect(screen.getByTestId("open-intent-encoder-unreachable")).toBeInTheDocument(), { timeout: 8000 });
+    await waitFor(() => expect(screen.getByTestId("run-all")).not.toBeDisabled(), { timeout: 4000 }); // the last run has finished, so nothing updates after teardown
     await user.click(screen.getByTestId("nav-scorecard"));
     const table = await screen.findByTestId("scorecard-table");
     expect(table.querySelectorAll("tbody tr[data-testid^=row-]").length).toBe(34); // 17 measured + 17 not measured yet
@@ -73,7 +74,7 @@ describe("Mock mode", () => {
     expect(clipboard).toMatch(/^Measured on 2026-11-07/);
     expect(clipboard.split("\n").filter((l) => l.startsWith("| ")).length).toBe(36);
     expect(screen.getByTestId("copy-status").textContent).toMatch(/Copied/);
-  });
+  }, 15_000); // 17 replays through the full UI: about 4 s on a loaded machine, so above the 5 s default
 
   it("the paste box scores lines with the same scorer and renders hostile text inert", async () => {
     lab = await startLab();
@@ -92,6 +93,73 @@ describe("Mock mode", () => {
     expect(res.querySelector("img")).toBeNull();
     expect(res.textContent.split("\\u202e").length - 1).toBeGreaterThanOrEqual(2);
     expect(within(res).getAllByText("met").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the Trace use-case dropdown is grouped into Happy path and Failures, with every case in exactly one", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    await user.click(screen.getByTestId("nav-trace"));
+    const select = await screen.findByTestId("trace-case");
+    const groups = [...select.querySelectorAll("optgroup")];
+    expect(groups.map((g) => g.label)).toEqual(["Happy path", "Failures"]);
+    const happy = [...groups[0].querySelectorAll("option")].map((o) => o.textContent);
+    const failures = [...groups[1].querySelectorAll("option")].map((o) => o.textContent);
+    expect(happy.some((t) => /Allowed tool call, agent key/.test(t))).toBe(true);
+    expect(failures.some((t) => /Tool call refused/.test(t))).toBe(true);
+    expect(happy.some((t) => /refused|blocked|Rejected|No credential/i.test(t))).toBe(false);
+    expect(select.querySelectorAll("option").length).toBe(happy.length + failures.length);
+  });
+
+  it("the Privilege -> Elasticsearch tab shows only Privilege's own log entries, each labelled with its index and runtime/console", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    await user.click(screen.getByTestId("nav-privilege"));
+    await screen.findByTestId("privilege-page");
+    expect(screen.getByTestId("privilege-channel").textContent).toMatch(/Nothing on this page comes from the gateway pod log/);
+    const lines = await screen.findByTestId("priv-lines");
+    const kinds = within(lines).getAllByTestId("entry-kind");
+    expect(kinds).toHaveLength(5);
+    expect(kinds.every((k) => /runtime event/.test(k.textContent))).toBe(true);
+    expect(within(lines).getAllByTestId("entry-from")[0].textContent).toMatch(/Privilege -> Elasticsearch · policy-decision-log/);
+    await user.selectOptions(screen.getByTestId("priv-kind"), "console");
+    expect(screen.getByTestId("priv-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
+  });
+
+  it("Refresh reloads the data and keeps this tab's runs (unlike Reset)", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    await user.click(screen.getByTestId("run-no-credential"));
+    await screen.findByTestId("trace-page", {}, { timeout: 5000 });
+    await user.click(screen.getByTestId("nav-run"));
+    await screen.findByTestId("open-no-credential");
+    await user.click(screen.getByTestId("refresh"));
+    await waitFor(() => expect(screen.getByTestId("notice").textContent).toMatch(/Refreshed: any wait for a log entry was stopped/));
+    expect(screen.getByTestId("open-no-credential")).toBeInTheDocument();
+    expect(screen.getByTestId("run-no-credential")).not.toBeDisabled();
+  });
+
+  it("Trace says where every log entry came from: a recorded sample names its sink and date, and each entry carries a from chip", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    await user.click(screen.getByTestId("run-mcp-allowed-key"));
+    await screen.findByTestId("trace-page", {}, { timeout: 5000 });
+    const origin = await screen.findByTestId("origin-gateway-log");
+    expect(origin.textContent).toMatch(/Recorded sample/);
+    expect(origin.textContent).toMatch(/Gateway pod log \(cyonproxy\.log\)/);
+    expect(origin.textContent).toMatch(/recorded 2026-11-07/);
+    const from = within(screen.getByTestId("sink-gateway-log")).getAllByTestId("entry-from");
+    expect(from[0].textContent).toMatch(/from: Gateway pod log/);
+    expect(screen.getByTestId("kind-legend").textContent).toMatch(/Runtime event.*Console event/);
+    expect(within(screen.getByTestId("sink-gateway-log")).getAllByTestId("entry-kind").every((k) => /runtime event/.test(k.textContent))).toBe(true);
   });
 
   it("Reset clears this tab's runs; the diagram page offers one diagram per flow with Simulate and Reset", async () => {
