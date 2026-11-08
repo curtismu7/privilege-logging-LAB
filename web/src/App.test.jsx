@@ -173,17 +173,31 @@ describe("Mock mode", () => {
     const items = () => within(sink).queryAllByTestId("entry-item");
     expect(items()).toHaveLength(3);
     expect(within(items()[0]).getAllByTestId("entry-tag").map((t) => t.getAttribute("data-tag"))).toEqual(expect.arrayContaining(["type:auth", "match:recorded sample", "identity:key audit-test"]));
+    const first = within(items()[0]);
+    expect(first.getAllByTestId("entry-tag")).toHaveLength(6); // at most six pills, then "+N more", like tags on a shelf box
+    await user.click(first.getByTestId("entry-tags-more"));
+    expect(first.getAllByTestId("entry-tag").length).toBeGreaterThan(6);
+    expect(first.queryByTestId("entry-tags-more")).toBeNull();
+    // like the Demo Shelf: collapsed behind "Filter by tag" with "X of Y shown"; counts say what each tag would leave
+    expect(within(sink).getByTestId("tag-filter-count").textContent).toBe("3 of 3 shown");
+    await user.click(within(sink).getByTestId("tag-filter-open"));
     const filterTag = (id) => within(sink).getAllByTestId("filter-tag").find((b) => b.getAttribute("data-tag") === id);
+    expect(filterTag("type:auth").textContent).toBe("auth 1");
     await user.click(filterTag("type:auth"));
     expect(items()).toHaveLength(1);
     expect(filterTag("type:auth")).toHaveAttribute("aria-pressed", "true");
-    expect(within(sink).getByTestId("tag-filter-count").textContent).toMatch(/Showing 1 of 3 entries/);
+    expect(within(sink).getByTestId("tag-filter-count").textContent).toBe("1 of 3 shown");
+    expect(within(items()[0]).getAllByTestId("entry-tag").find((b) => b.getAttribute("data-tag") === "type:auth")).toHaveAttribute("aria-pressed", "true");
     await user.click(filterTag("type:policy"));
     expect(items()).toHaveLength(2);
+    expect(filterTag("identity:key audit-test")).not.toBeDisabled();
     await user.click(filterTag("identity:key audit-test"));
     expect(items()).toHaveLength(1);
+    expect(filterTag("type:policy").textContent).toBe("policy 0"); // with the key picked, policy alone would leave nothing
     await user.click(within(sink).getByTestId("tag-filter-clear"));
     expect(items()).toHaveLength(3);
+    await user.click(within(sink).getByTestId("tag-filter-hide"));
+    expect(within(sink).getByTestId("tag-filter-open")).toBeInTheDocument();
   });
 
   it("Trace says where every log entry came from: a recorded sample names its sink and date, and each entry carries a from chip", async () => {

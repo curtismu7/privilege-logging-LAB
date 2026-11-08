@@ -133,6 +133,7 @@ async function mockProof(browser) {
     await p.click('[data-testid=open-mcp-allowed-key]'); await p.waitForSelector('[data-testid=lines-gateway-log]');
     const marks = await p.$$eval('[data-testid=lines-gateway-log] mark', (ms) => ms.map((m) => `${m.dataset.field}:${m.textContent}`));
     check(`mock/${theme}: trace marks user, agent, tool and decision inline`, ['user', 'agent', 'tool', 'decision'].every((f) => marks.some((m) => m.startsWith(`${f}:`))), marks.join(' | '));
+    await p.click('[data-testid=lines-gateway-log] [data-testid=tag-filter-open]');
     await p.click('[data-testid=lines-gateway-log] [data-testid=filter-tag][data-tag="type:auth"]');
     const filtered = await p.locator('[data-testid=lines-gateway-log] [data-testid=entry-item]').count();
     await p.click('[data-testid=lines-gateway-log] [data-testid=tag-filter-clear]');
@@ -227,6 +228,7 @@ async function realProof(browser) {
   await p.click('[data-testid=open-mcp-allowed-key]');
   await p.waitForSelector('[data-testid=lines-k8s-pod]', { timeout: 20000 });
   const allEntries = await p.locator('[data-testid=lines-k8s-pod] [data-testid=entry-item]').count();
+  await p.click('[data-testid=lines-k8s-pod] [data-testid=tag-filter-open]');
   await p.click('[data-testid=lines-k8s-pod] [data-testid=filter-tag][data-tag="match:this call"]');
   const callOnly = await p.locator('[data-testid=lines-k8s-pod] [data-testid=entry-method]').allTextContents();
   check('real: the "this call" tag hides the time-window neighbours', callOnly.length > 0 && callOnly.length < allEntries && callOnly.every((t) => t === 'matched by marker'));

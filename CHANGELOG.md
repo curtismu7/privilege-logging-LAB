@@ -5,6 +5,7 @@
 - Trace: every log entry has clickable tags (event type, this call or nearby, labels, identity) and each sink has a tag filter with counts.
 - Run stays on the Run page: the result shows on the card and focus goes back to that Run button; Open trace is a separate click. Look for entries works the same way.
 - Real: the confirm before the first send opens inside the case card you ran (Send button there), so the page no longer jumps to the top. Run all and the Privilege page keep the top-of-page confirm.
+- Trace tags restyled after the Demo Shelf: Filter by tag toggle, grouped chip panel with counts and disabled zero chips, X of Y shown, Clear tags / Hide tags, six pills per entry then +N more.
 - Getting back from a Trace: a Back to Run button on the Trace page, and the browser Back button works (page changes are history entries now). Either way the Run page comes back with the case you opened in view and its Open trace button focused.
 
 ## Unreleased (workload token)

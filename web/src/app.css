@@ -148,17 +148,20 @@ button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:h
    dashed edge. Muted on --surface-2 stays above 4.5:1 in both themes. Override here; standalone-ui.css is vendored. */
 button.primary:disabled { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--muted); opacity: 1; }
 .priv-filters { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; margin: 0.5rem 0; }
-/* Entry tags and the tag filter (Trace): unselected tags keep readable text on surface-2; selected = accent fill. */
-.tagfilter { display: grid; gap: 0.35rem; margin: 0.5rem 0 0.75rem; }
-.tagfilter__group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
-.tagfilter__label { font-size: 0.72rem; min-width: 9rem; }
-.entry__tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.3rem 0; }
-.etag { min-height: 26px; font-weight: 500; font-size: 0.72rem; line-height: 1.3; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); border-left-width: 3px; background: var(--surface-2); color: var(--text); cursor: pointer; overflow-wrap: anywhere; text-align: left; }
-.etag--type { border-left-color: var(--status-info); } .etag--match { border-left-color: var(--status-ok); }
-.etag--identity { border-left-color: var(--status-warn); } .etag--label { border-left-color: var(--muted); }
-.etag--on { background: var(--accent); color: var(--on-accent); border-color: var(--on-accent-border); }
-.etag__n { opacity: 0.75; }
-.etag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Entry tags and the tag filter (Trace), styled after the Demo Shelf (demo-shelf-LAB web/src/styles.css): same sizes, pills and
+   panel. A picked pill is filled by the shared aria-pressed rule in standalone-ui.css, plus the shelf's accent outline. */
+.tag-filters__row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tag-filters { display: grid; gap: 8px; padding: 14px; margin: 0.5rem 0 0.75rem; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.tag-filters__group { flex: 0 0 11rem; color: var(--muted); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.tag-chip { display: inline-flex; gap: 6px; align-items: baseline; min-height: 0; padding: 3px 12px; border-radius: 999px; font-size: 0.8rem; overflow-wrap: anywhere; }
+.tag-chip small { font-weight: 500; }
+.tag-chip[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tag-filters__bar { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: var(--muted); font-size: 0.8rem; }
+.tag-toggle { display: flex; gap: 12px; align-items: center; margin: 0.5rem 0; color: var(--muted); font-size: 0.8rem; }
+.tag-pills { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.3rem 0; padding: 0; list-style: none; }
+.tag-pill { min-height: 0; padding: 1px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 500; overflow-wrap: anywhere; text-align: left; }
+.tag-more { min-height: 0; padding: 1px 8px; border-radius: 999px; border-style: dashed; color: var(--muted); font-size: 0.7rem; font-weight: 500; }
+@media (max-width: 600px) { .tag-filters__group { flex-basis: 100%; } }
 /* The confirm gate inside a case card (single Run): same warning edge as the top-level gate, no nested card. */
 .gate-inline { margin: 0.5rem 0; padding: 0.6rem 0.75rem; border: 1px solid var(--status-warn); border-left-width: 4px; border-radius: 8px; background: var(--surface-2); }
 .gate-inline__title { font-size: 0.95rem; margin: 0 0 0.35rem; }
