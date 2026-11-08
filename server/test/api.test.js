@@ -440,3 +440,12 @@ test('Real search: a bearer token inside a search hit is redacted before it is s
     }, realOpts(gw, search));
   } finally { await gw.close(); await search.close(); }
 });
+
+test('shelf button: GET /api/shelf is reachable without a web build and returns SHELF_URL; POST is refused', async () => {
+  await withServer(async (url) => {
+    const r = await get(url, '/api/shelf');
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { shelfUrl: 'https://shelf.example:8443' });
+    assert.notEqual((await post(url, '/api/shelf', {})).status, 200);
+  }, { env: { ...NOENV, SHELF_URL: 'https://shelf.example:8443/' } });
+});
