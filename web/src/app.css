@@ -159,3 +159,19 @@ button.primary:disabled { background: var(--surface-2); color: var(--muted); bor
 .etag--on { background: var(--accent); color: var(--on-accent); border-color: var(--on-accent-border); }
 .etag__n { opacity: 0.75; }
 .etag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Privilege -> Elasticsearch explorer */
+.priv-filters form.inline { display: inline-flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.priv-filters select, .priv-filters input { max-width: 100%; min-width: 0; }
+.priv-summary { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin: 0.5rem 0; font-size: 0.85rem; }
+.priv-chart { margin: 0.5rem 0; max-width: 100%; }
+.priv-chart svg { display: block; width: 100%; height: 120px; }
+.priv-chart__base { stroke: var(--border); stroke-width: 1; }
+.priv-chart__target { fill: transparent; }
+.priv-chart__bar { fill: var(--status-info); }
+.priv-chart__hit { cursor: zoom-in; }
+.priv-chart__hit:hover .priv-chart__target, .priv-chart__hit:focus-visible .priv-chart__target { fill: var(--surface-2); }
+.priv-chart__hit:focus-visible { outline: 2px solid var(--status-info); }
+.priv-table tr.is-selected td { background: var(--surface-2); }
+button.linkish { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; color: var(--status-info); font: inherit; cursor: pointer; text-align: left; }
+.priv-filters .seg { flex-wrap: wrap; }
+.priv-table td, .priv-table td.mono { white-space: nowrap; overflow-wrap: normal; }

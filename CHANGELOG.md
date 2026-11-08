@@ -5,6 +5,12 @@
 - Trace: every log entry has clickable tags (event type, this call or nearby, labels, identity) and each sink has a tag filter with counts.
 - Run stays on the Run page: the result shows on the card and focus goes back to that Run button; Open trace is a separate click. Look for entries works the same way.
 
+## Unreleased (Privilege tab explorer)
+
+- Privilege -> Elasticsearch tab: quick ranges up to 90 days and a custom From/To; filters (kind, index, decision, user, agent key, tool, app, event, free text); server-side paging through the console (200 per read, 5,000 cap, 10,000 window, said plainly when cut off) and Newer/Older pages; counts and an events-over-time chart with click-to-zoom; a table view with Related records by request id or trace id (`GET /api/privilege-logs/related`); JSON and CSV export; Open in Kibana (`PRIVILEGE_KIBANA_URL`). Every query parameter is validated (400). The `minutes` parameter is replaced by `range` or `from`/`to`.
+- Fix: secrets the Real client knows (the agent key) are now masked inside decoded console records too, not only in the base64 answer text.
+- Mock sample: recorded shapes, placeholder values (adds AI Guard, HTTP and console records in the 2026-11-08 shapes).
+
 ## Unreleased (workload token)
 
 - Valid workload token: the lab mints the token itself (ES256, 300 s, key derived from `PRIV_LOG_FED_SIGNING_SEED`, audience from `PRIV_LOG_FED_AUDIENCE`). `npm run fed-key` makes the seed. The case card and `GET /api/fed-setup` show the public issuer, subject and JWKS, plus the console steps. A pasted token still overrides the minted one. Measured on a live gateway 2026-11-08: `workload token accepted`, call answered 200.

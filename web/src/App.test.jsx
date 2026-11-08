@@ -120,13 +120,17 @@ describe("Mock mode", () => {
     await user.click(screen.getByTestId("nav-privilege"));
     await screen.findByTestId("privilege-page");
     expect(screen.getByTestId("privilege-channel").textContent).toMatch(/Nothing on this page comes from the gateway pod log/);
+    await screen.findByTestId("priv-table");
+    expect(screen.getByTestId("priv-mock-label").textContent).toMatch(/recorded shapes, placeholder values/);
+    await user.click(screen.getByTestId("priv-view-json"));
     const lines = await screen.findByTestId("priv-lines");
     const kinds = within(lines).getAllByTestId("entry-kind");
-    expect(kinds).toHaveLength(5);
-    expect(kinds.every((k) => /runtime event/.test(k.textContent))).toBe(true);
-    expect(within(lines).getAllByTestId("entry-from")[0].textContent).toMatch(/Privilege -> Elasticsearch · policy-decision-log/);
+    expect(kinds).toHaveLength(8);
+    expect(kinds.filter((k) => /runtime event/.test(k.textContent))).toHaveLength(7);
+    expect(within(lines).getAllByTestId("entry-from")[0].textContent).toMatch(/Privilege -> Elasticsearch · /);
+    await user.selectOptions(screen.getByTestId("priv-index"), "aiguard-log");
     await user.selectOptions(screen.getByTestId("priv-kind"), "console");
-    expect(screen.getByTestId("priv-empty")).toBeInTheDocument();
+    expect(await screen.findByTestId("priv-empty")).toBeInTheDocument();
     expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
   });
 
