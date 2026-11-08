@@ -8,6 +8,7 @@ name: privilege-logging-lab
 
 services:
   privilege-logging-lab:
+    restart: unless-stopped
     build: .
     ports:
       - "127.0.0.1:${HOST_PORT:-7801}:7801"
