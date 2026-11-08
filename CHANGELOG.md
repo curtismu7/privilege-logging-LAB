@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (bridge)
+
+- Privilege logs bridge (`npm run bridge`): copies policy-decision-log, aiguard-log and agent-approval-log through the console into the SIEM index under their own ids, every minute, with a 10-minute overlap and a saved position; the doctor reports its last pass.
+
 ## Unreleased
 
 - Honesty fixes: a guardrail block scores decision partial (not an authorization decision); `Access Denied` counts as met only on a gateway line; an intent-unavailable warning is no decision evidence; every tools/list case is n/a for tool; the console sink is UNVERIFIED (never read); score notes disclose where the recorded level differs from the scorer on the sample lines; the "(no guardrail line)" annotation is no longer stored as a log line; per-field tallies are labelled inferred; the refusal and sink facts are counted from the capture; the Real banner names the kubectl proxy pod-log source.

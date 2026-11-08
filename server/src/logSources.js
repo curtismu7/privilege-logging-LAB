@@ -91,14 +91,12 @@ export async function readSearch({ client, search, index, fromMs, toMs, trace })
 
 export const DECISION_MAX_BYTES = 1_048_576;
 
-// The request the console's own pages send, for all seven indices at once. The console wants an x-procyon-session-id header; the local
-// console does not check its value (a fresh random one is sent each time). Records do not carry the run marker, so they are matched to
-// the call by time window and app (inferred). Decision records carry User, AgentKey, Target (the tool), Decision, Reason and PolicyIDs.
-export async function readDecisions({ client, decisions, fromMs, toMs, trace }) {
+// One elasticlog search: raw hits (each with _id, _index and an UNREDACTED _source) plus the hop. Callers redact before showing anything.
+export async function elasticlogSearch({ client, decisions, indices = PRIVILEGE_INDICES, fromMs, toMs, trace, size = 200, from = 0 }) {
   const url = `${decisions.url.origin}/api/${enc(decisions.tenant)}/v1/elasticlog`;
   const span = trace.span(); const tp = formatTraceparent(trace.traceId, span);
-  const body = JSON.stringify({ Indices: { Elems: PRIVILEGE_INDICES }, Filters: { UserName: '', DeviceName: '', ResourceName: '', RequestID: '' }, Size: 200,
-    StartTime: new Date(fromMs).toISOString(), EndTime: new Date(toMs).toISOString(), From: 0, Attributes: { Map: { track_total_hits: 'true' } }, ObjectMeta: { Namespace: 'default', Tenant: decisions.tenant } });
+  const body = JSON.stringify({ Indices: { Elems: indices }, Filters: { UserName: '', DeviceName: '', ResourceName: '', RequestID: '' }, Size: size,
+    StartTime: new Date(fromMs).toISOString(), EndTime: new Date(toMs).toISOString(), From: from, Attributes: { Map: { track_total_hits: 'true' } }, ObjectMeta: { Namespace: 'default', Tenant: decisions.tenant } });
   const headers = { 'content-type': 'application/json', accept: 'application/json', 'x-procyon-session-id': randomUUID(), traceparent: tp };
   const res = await client.request({ url, method: 'POST', headers, body, maxBytes: DECISION_MAX_BYTES });
   const hop = { n: 0, label: 'read Privilege\'s logs through the console', from: 'lab', to: 'log-source', traceparent: tp, request: { method: 'POST', url, headers, body },
@@ -107,20 +105,28 @@ export async function readDecisions({ client, decisions, fromMs, toMs, trace }) 
     response: { status: res.status, headers: res.headers, body: redactLine(res.text.replace(/"Response"\s*:\s*"[A-Za-z0-9+/=]*"/, (m) => `"Response":"<base64 search result, ${m.length} bytes: decoded and redacted into the entries, not shown here>"`).slice(0, 4000)), truncated: res.truncated, ms: res.ms, redirect: res.redirect } };
   if (res.redirect) throw fail('redirect_refused', 'the console answered a redirect; redirects are never followed', hop);
   if (res.status !== 200) throw fail('source_http_error', `the console answered HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (is the PingOne Privilege desktop app running and signed in?)' : ''}`, hop);
-  let hits = null;
+  let hits = null; let total = null;
   try {
     const outer = JSON.parse(res.text);
     const inner = typeof outer?.Response === 'string' ? JSON.parse(Buffer.from(outer.Response.slice(0, DECISION_MAX_BYTES * 2), 'base64').toString('utf8')) : outer?.Response;
-    hits = inner?.hits?.hits;
+    hits = inner?.hits?.hits; total = typeof inner?.hits?.total === 'object' ? inner.hits.total.value : inner?.hits?.total;
   } catch { /* not the console's shape */ }
-  if (!Array.isArray(hits)) throw fail('source_bad_shape', 'the console answer holds no log records (Response.hits.hits)', hop);
+  if (!Array.isArray(hits) || res.truncated) throw fail('source_bad_shape', res.truncated ? 'the console answer was cut at the size cap' : 'the console answer holds no log records (Response.hits.hits)', hop);
+  return { hits, total: Number.isFinite(total) ? total : null, hop };
+}
+
+// The request the console's own pages send, for all seven indices at once. The console wants an x-procyon-session-id header; the local
+// console does not check its value (a fresh random one is sent each time). Records do not carry the run marker, so they are matched to
+// the call by time window and app (inferred). Decision records carry User, AgentKey, Target (the tool), Decision, Reason and PolicyIDs.
+export async function readDecisions({ client, decisions, fromMs, toMs, trace }) {
+  const { hits, hop } = await elasticlogSearch({ client, decisions, fromMs, toMs, trace });
   const lines = hits.slice(0, MAX_LINES).map((h) => {
     const t = h?._source?.['@timestamp']; const ts = typeof t === 'string' ? Date.parse(t) : NaN;
     const index = typeof h?._index === 'string' && PRIVILEGE_INDICES.includes(h._index) ? h._index : null;
     const text = redactLine(hitLine(h));
     return { text, ts: Number.isFinite(ts) ? ts : null, index, kind: kindOf({ index, text }) };
   });
-  return { lines, hops: [hop], truncated: res.truncated, notes: res.truncated ? 'the console answer was cut at the size cap' : '' };
+  return { lines, hops: [hop], truncated: false, notes: '' };
 }
 
 export async function readSource(src, { client, cfg, fromMs, toMs, now, trace }) {

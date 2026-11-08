@@ -76,9 +76,10 @@ export async function fakeConsole({ records = [], status = 200, raw = null } = {
     if (raw !== null) { res.writeHead(status, { 'content-type': 'application/json' }); return res.end(raw); }
     let q; try { q = JSON.parse(body); } catch { q = {}; }
     const recs = typeof records === 'function' ? records() : records;
-    const hits = recs.filter((r) => (!q.StartTime || r['@timestamp'] >= q.StartTime) && (!q.EndTime || r['@timestamp'] <= q.EndTime)).map(({ _index, ...r }) => ({ _index: _index || 'policy-decision-log', _source: r }));
+    const hits = recs.filter((r) => (!q.StartTime || r['@timestamp'] >= q.StartTime) && (!q.EndTime || r['@timestamp'] <= q.EndTime)).map(({ _index, _id, ...r }) => ({ _index: _index || 'policy-decision-log', ...(_id ? { _id } : {}), _source: r }));
     res.writeHead(status, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ...q, Response: Buffer.from(JSON.stringify({ hits: { total: { value: hits.length }, hits } })).toString('base64') }));
+    const page = hits.slice(q.From || 0, (q.From || 0) + (q.Size || hits.length));
+    res.end(JSON.stringify({ ...q, Response: Buffer.from(JSON.stringify({ hits: { total: { value: hits.length }, hits: page } })).toString('base64') }));
   });
   const base = await listen(server);
   return { base, requests, close: () => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }) };

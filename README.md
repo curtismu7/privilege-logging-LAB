@@ -92,6 +92,26 @@ In `~/Development/.env` (or the file named by `STANDALONE_ENV`; the environment 
 
 Not every case can be driven in Real: A2A, LLM and the intent-encoder case need routes this lab has not measured, so Real lists them as not runnable and you paste their log lines instead. The Rejected cases, and the four bad federated-token cases, use a bad credential the lab generates itself (a made-up key, a malformed token, or a JWT with one wrong claim on `.invalid` hosts); you never paste one. A revoked, expired or rate-limited key cannot be generated: those need a real key in that state.
 
+## The Privilege logs bridge (owner-run)
+
+Privilege's SIEM export sends console events (`audit-log`) and gateway HTTP records (`proxy-audit-log`) but not its decision, guardrail or approval records. The bridge copies those three (`policy-decision-log`, `aiguard-log`, `agent-approval-log`) into the SIEM index every minute:
+
+```
+npm run bridge            # every 60 s until stopped
+npm run bridge -- --once  # one pass
+```
+
+- **Reads** through the console's `elasticlog` API (the same read as the Privilege -> Elasticsearch tab), so it runs where the PingOne Privilege desktop app runs. No cloud API credential exists for it, so it cannot run in Kubernetes.
+- **Writes** each record to `<PRIV_LOG_BRIDGE_ES_URL>/ping-siem-events-v2/_doc/<the record's own id>`, so a re-read never duplicates. The index's ingest pipeline masks keys and labels each record `privilege_event_kind: runtime`; the bridge adds `Index` (the source index) and `privilege_bridge: true`.
+- **Catches up**: each pass reads from 10 minutes before the newest record it copied (records reach Privilege's store late), and a failed pass keeps the saved position. A first run copies the last 30 days. State: `~/.config/privilege-logging-lab/bridge-state.json` (`PRIV_LOG_BRIDGE_STATE` overrides). `npm run doctor` says when it last ran.
+
+| Name | |
+| --- | --- |
+| `PRIV_LOG_BRIDGE_ES_URL` | The Elasticsearch origin (https, or http on loopback). |
+| `PRIV_LOG_BRIDGE_ES_APIKEY` | An Elasticsearch API key that may only write to the target index. **Write-only**: never printed or logged. |
+
+The bridge also needs the console settings above. What it cannot fix: a plain allowed call has no decision record to copy (only calls a policy matched get one).
+
 ## Where an entry came from: console vs runtime
 
 Every entry is labelled twice:
