@@ -18,7 +18,7 @@ export class RealError extends Error {
 
 export const LIMITS = { timeoutMs: 8000, maxBytes: 262_144, maxRequestBytes: 16_384 };
 
-// loopbackNames: host names the owner configured that may resolve to LOOPBACK only (the local Privilege console, local.procyon.ai). Any
+// loopbackNames: host names the owner configured that may resolve to LOOPBACK only (the local Privilege console's name, which resolves to 127.0.0.1). Any
 // other private or reserved answer is still refused for them, and every other name keeps the full guard.
 export function createRealClient({ origins, secrets = [], lookup = dns.lookup, timeoutMs = LIMITS.timeoutMs, maxBytes = LIMITS.maxBytes, now = Date.now, loopbackNames = [], caByHost = {} } = {}) {
   const loopNames = new Set(loopbackNames.map((h) => String(h).toLowerCase()));
