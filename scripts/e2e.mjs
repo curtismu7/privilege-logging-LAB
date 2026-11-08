@@ -110,16 +110,16 @@ async function mockProof(browser) {
     const real409 = await p.evaluate(async () => (await fetch('/api/mode', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"source":"real"}' })).status);
     check(`mock/${theme}: POST /api/mode real answers 409 when not configured`, real409 === 409);
     await shot(p, `mock-${theme}-run`);
-    // a single Run shows the two-phase spinner, then opens its Trace by itself
+    // a single Run shows the two-phase spinner and stays on the Run page, at the same scroll position, with the result on the card
+    const y0 = await p.evaluate(() => window.scrollY);
     await p.click('[data-testid=run-mcp-allowed-key]');
     await p.waitForSelector('[data-testid=busy-mcp-allowed-key]');
     const phase1 = await p.getAttribute('[data-testid=busy-mcp-allowed-key]', 'role');
     await p.waitForFunction(() => /Fetching the log entry/.test(document.querySelector('[data-testid=busy-mcp-allowed-key]')?.textContent || ''));
     check(`mock/${theme}: spinner is role=status, aria-busy on the case, and reaches "Fetching the log entry"`, phase1 === 'status' && (await p.getAttribute('[data-testid=case-mcp-allowed-key]', 'aria-busy')) === 'true');
     await shot(p, `mock-${theme}-spinner`);
-    await p.waitForSelector('[data-testid=lines-gateway-log]', { timeout: 15000 });
-    check(`mock/${theme}: the Trace opened by itself and the banner still says replay`, /nothing is sent/.test(await p.textContent('[data-testid=banner]')));
-    await p.click('[data-testid=nav-run]');
+    await p.waitForSelector('[data-testid=open-mcp-allowed-key]', { timeout: 15000 });
+    check(`mock/${theme}: Run stays on the Run page, did not scroll, and the banner still says replay`, (await p.locator('[data-testid=run-page]').count()) === 1 && (await p.locator('[data-testid=trace-page]').count()) === 0 && Math.abs((await p.evaluate(() => window.scrollY)) - y0) < 2 && /nothing is sent/.test(await p.textContent('[data-testid=banner]')));
     await p.click('[data-testid=run-all]');
     await p.waitForSelector('[data-testid=open-intent-encoder-unreachable]', { timeout: 60000 });
     check(`mock/${theme}: Run all replayed 17 cases (the 17 not-yet-measured are not run)`, (await p.locator('[data-testid^=open-]').count()) === 17);
@@ -133,6 +133,10 @@ async function mockProof(browser) {
     await p.click('[data-testid=open-mcp-allowed-key]'); await p.waitForSelector('[data-testid=lines-gateway-log]');
     const marks = await p.$$eval('[data-testid=lines-gateway-log] mark', (ms) => ms.map((m) => `${m.dataset.field}:${m.textContent}`));
     check(`mock/${theme}: trace marks user, agent, tool and decision inline`, ['user', 'agent', 'tool', 'decision'].every((f) => marks.some((m) => m.startsWith(`${f}:`))), marks.join(' | '));
+    await p.click('[data-testid=lines-gateway-log] [data-testid=filter-tag][data-tag="type:auth"]');
+    const filtered = await p.locator('[data-testid=lines-gateway-log] [data-testid=entry-item]').count();
+    await p.click('[data-testid=lines-gateway-log] [data-testid=tag-filter-clear]');
+    check(`mock/${theme}: entry tags filter the trace (auth = 1 of 3) and Clear restores`, filtered === 1 && (await p.locator('[data-testid=lines-gateway-log] [data-testid=entry-item]').count()) === 3);
     await shot(p, `mock-${theme}-trace`, { fullPage: true });
     await jsonProof(p, `mock/${theme}`, `mock-${theme}`);
     const contrast = await p.evaluate(CONTRAST);
@@ -202,8 +206,16 @@ async function realProof(browser) {
   await p.waitForFunction(() => /Fetching the log entry\.\.\./.test(document.querySelector('[data-testid=busy-mcp-allowed-key]')?.textContent || ''));
   check('real: the page shows "Fetching the log entry..." with a spinner (role=status, aria-busy)', (await p.getAttribute('[data-testid=busy-mcp-allowed-key]', 'role')) === 'status' && (await p.getAttribute('[data-testid=case-mcp-allowed-key]', 'aria-busy')) === 'true' && (await p.locator('[data-testid=busy-mcp-allowed-key] .spinner').count()) === 1);
   await shot(p, 'real-fetching');
+  await p.waitForSelector('[data-testid=open-mcp-allowed-key]', { timeout: 20000 });
+  await p.waitForFunction(() => !document.querySelector('[data-testid=busy-mcp-allowed-key]'), null, { timeout: 20000 });
+  check('real: after the entry is fetched the page stays on Run (Open trace is a separate click)', (await p.locator('[data-testid=run-page]').count()) === 1 && (await p.locator('[data-testid=trace-page]').count()) === 0);
+  await p.click('[data-testid=open-mcp-allowed-key]');
   await p.waitForSelector('[data-testid=lines-k8s-pod]', { timeout: 20000 });
-  check('real: after the entry is fetched the Trace opened by itself', await p.isVisible('[data-testid=trace-page]'));
+  const allEntries = await p.locator('[data-testid=lines-k8s-pod] [data-testid=entry-item]').count();
+  await p.click('[data-testid=lines-k8s-pod] [data-testid=filter-tag][data-tag="match:this call"]');
+  const callOnly = await p.locator('[data-testid=lines-k8s-pod] [data-testid=entry-method]').allTextContents();
+  check('real: the "this call" tag hides the time-window neighbours', callOnly.length > 0 && callOnly.length < allEntries && callOnly.every((t) => t === 'matched by marker'));
+  await p.click('[data-testid=lines-k8s-pod] [data-testid=tag-filter-clear]');
   check('real: the MCP exchange ran (initialize, initialized, tools/call), each with traceparent, and the marker travelled in the tool argument', gw.requests.map((r) => JSON.parse(r.body).method).join(',') === 'initialize,notifications/initialized,tools/call' && gw.requests.every((r) => /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/.test(r.headers.traceparent)) && /^audit-[0-9a-f]{8}$/.test(JSON.parse(gw.requests[2].body).params.arguments.city));
   const marker = (await p.textContent('[data-testid=trace-marker]')).trim();
   check('real: the log entry was found by the run marker, neighbours are labelled inferred', JSON.parse(gw.requests[2].body).params.arguments.city === marker && (await p.locator('[data-testid=entry-method]').allTextContents()).some((t) => t === 'matched by marker') && (await p.locator('[data-testid=entry-method]').allTextContents()).some((t) => /time window: inferred/.test(t)));
@@ -237,6 +249,7 @@ async function realProof(browser) {
   await p.click('[data-testid=mode-mock]'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-mock]').getAttribute('aria-pressed') === 'true');
   const sent = gw.requests.length;
   await p.click('[data-testid=nav-run]'); await p.click('[data-testid=run-no-credential]');
+  await p.click('[data-testid=open-no-credential]', { timeout: 15000 });
   await p.waitForSelector('[data-testid=lines-gateway-log]', { timeout: 15000 });
   check('real->mock: switching back replays offline (the fake gateway saw no new request)', gw.requests.length === sent);
   await p.click('[data-testid=mode-real]'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-real]').getAttribute('aria-pressed') === 'true');

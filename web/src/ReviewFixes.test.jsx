@@ -78,16 +78,17 @@ describe("Run page accessibility and focus", () => {
     expect(screen.getByTestId("mode-real")).toHaveAttribute("aria-describedby", "real-hint");
   });
 
-  it("after a Run opens its Trace, focus is on the Trace heading, not lost to <body>", async () => {
+  it("after a Run the page stays on Run and focus returns to that Run button, not lost to <body>", async () => {
     lab = await startLab();
     const user = userEvent.setup();
     render(<App />);
     await screen.findByTestId("run-page");
     await waitFor(() => expect(screen.getByTestId("run-mcp-allowed-key")).not.toBeDisabled());
     await user.click(screen.getByTestId("run-mcp-allowed-key"));
-    await screen.findByTestId("lines-gateway-log", {}, { timeout: 5000 });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 })));
-    expect(document.activeElement.textContent).toMatch(/^Trace/);
+    await screen.findByTestId("open-mcp-allowed-key", {}, { timeout: 5000 });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("run-mcp-allowed-key")));
+    expect(screen.getByTestId("run-page")).toBeInTheDocument();
+    expect(screen.queryByTestId("trace-page")).toBeNull();
   });
 
   it("Run all gives focus back to Run all when the browser dropped it while the buttons were disabled", async () => {

@@ -41,7 +41,7 @@ describe("Mock mode", () => {
     }
     await screen.findByTestId("run-page");
     await user.click(screen.getByTestId("run-mcp-allowed-key"));
-    // the run opens its Trace by itself once the log entry has been fetched
+    await openTrace(user, "mcp-allowed-key");
     const lines = await screen.findByTestId("lines-gateway-log", {}, { timeout: 5000 });
     const marked = [...lines.querySelectorAll("mark")].map((m) => [m.getAttribute("data-field"), m.textContent]);
     expect(marked).toContainEqual(["tool", "get_weather"]);
@@ -136,13 +136,35 @@ describe("Mock mode", () => {
     render(<App />);
     await screen.findByTestId("run-page");
     await user.click(screen.getByTestId("run-no-credential"));
-    await screen.findByTestId("trace-page", {}, { timeout: 5000 });
-    await user.click(screen.getByTestId("nav-run"));
-    await screen.findByTestId("open-no-credential");
+    await screen.findByTestId("open-no-credential", {}, { timeout: 5000 });
     await user.click(screen.getByTestId("refresh"));
     await waitFor(() => expect(screen.getByTestId("notice").textContent).toMatch(/Refreshed: any wait for a log entry was stopped/));
     expect(screen.getByTestId("open-no-credential")).toBeInTheDocument();
     expect(screen.getByTestId("run-no-credential")).not.toBeDisabled();
+  });
+
+  it("Trace: every entry carries tags, and clicking tags filters the entries (any within a group, all across groups); Clear restores", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    await user.click(screen.getByTestId("run-mcp-allowed-key"));
+    await openTrace(user, "mcp-allowed-key");
+    const sink = await screen.findByTestId("lines-gateway-log", {}, { timeout: 5000 });
+    const items = () => within(sink).queryAllByTestId("entry-item");
+    expect(items()).toHaveLength(3);
+    expect(within(items()[0]).getAllByTestId("entry-tag").map((t) => t.getAttribute("data-tag"))).toEqual(expect.arrayContaining(["type:auth", "match:recorded sample", "identity:key audit-test"]));
+    const filterTag = (id) => within(sink).getAllByTestId("filter-tag").find((b) => b.getAttribute("data-tag") === id);
+    await user.click(filterTag("type:auth"));
+    expect(items()).toHaveLength(1);
+    expect(filterTag("type:auth")).toHaveAttribute("aria-pressed", "true");
+    expect(within(sink).getByTestId("tag-filter-count").textContent).toMatch(/Showing 1 of 3 entries/);
+    await user.click(filterTag("type:policy"));
+    expect(items()).toHaveLength(2);
+    await user.click(filterTag("identity:key audit-test"));
+    expect(items()).toHaveLength(1);
+    await user.click(within(sink).getByTestId("tag-filter-clear"));
+    expect(items()).toHaveLength(3);
   });
 
   it("Trace says where every log entry came from: a recorded sample names its sink and date, and each entry carries a from chip", async () => {
@@ -151,7 +173,7 @@ describe("Mock mode", () => {
     render(<App />);
     await screen.findByTestId("run-page");
     await user.click(screen.getByTestId("run-mcp-allowed-key"));
-    await screen.findByTestId("trace-page", {}, { timeout: 5000 });
+    await openTrace(user, "mcp-allowed-key");
     const origin = await screen.findByTestId("origin-gateway-log");
     expect(origin.textContent).toMatch(/Recorded sample/);
     expect(origin.textContent).toMatch(/Gateway pod log \(cyonproxy\.log\)/);
@@ -168,9 +190,7 @@ describe("Mock mode", () => {
     render(<App />);
     await screen.findByTestId("run-page");
     await user.click(screen.getByTestId("run-no-credential"));
-    await screen.findByTestId("trace-page", {}, { timeout: 5000 });
-    await user.click(screen.getByTestId("nav-run"));
-    await screen.findByTestId("open-no-credential");
+    await screen.findByTestId("open-no-credential", {}, { timeout: 5000 });
     await user.click(screen.getByTestId("reset"));
     await waitFor(() => expect(screen.queryByTestId("open-no-credential")).toBeNull());
     await user.click(screen.getByTestId("nav-diagram"));
@@ -240,9 +260,11 @@ describe("Real mode (against a fake gateway)", () => {
       expect(screen.getByTestId("gate-gateway").textContent).toBe(new URL(gw.url).origin);
       expect(screen.queryByTestId("open-mcp-allowed-key")).toBeNull();
       await user.click(screen.getByTestId("gate-confirm"));
-      // the run goes on after the confirmation and opens its Trace; no log source is configured, so the paste box is the fallback
-      await screen.findByTestId("trace-page", {}, { timeout: 5000 });
+      // the run goes on after the confirmation and stays on the Run page; no log source is configured, so the Trace offers the paste box
+      await waitFor(() => expect(screen.getByTestId("run-mcp-allowed-key")).not.toBeDisabled(), { timeout: 5000 });
+      expect(screen.getByTestId("run-page")).toBeInTheDocument();
       expect(gate).not.toBeInTheDocument();
+      await openTrace(user, "mcp-allowed-key");
       expect(await screen.findByTestId("unscored")).toBeInTheDocument();
       expect(screen.getByTestId("retrieval").textContent).toMatch(/not configured/);
       expect(screen.getByTestId("retrieval").textContent).toMatch(/Paste the gateway log lines/);
@@ -301,13 +323,15 @@ const fakeProxy = (gw, ctl = { mode: "ok", delayMs: 0 }) => new Promise((resolve
   server.listen(0, "127.0.0.1", () => resolve({ base: `http://127.0.0.1:${server.address().port}`, ctl, close: () => new Promise((r) => { server.closeAllConnections(); server.close(r); }) }));
 });
 const realLab = async (gw, proxy, opts) => startLab({ opts, env: { STANDALONE_ENV: "/nonexistent/settings.env", PRIV_LOG_GATEWAY_URL: gw.url, PRIV_LOG_AGENT_KEY: KEY, ...(proxy ? { PRIV_LOG_K8S_PROXY_URL: proxy.base, PRIV_LOG_K8S_NAMESPACE: "privilege", PRIV_LOG_K8S_POD: "gateway-abc" } : {}) } });
+// Run no longer opens the Trace: wait for the card's Open trace button and click it.
+const openTrace = async (user, id) => user.click(await screen.findByTestId(`open-${id}`, {}, { timeout: 8000 }));
 const confirmAndRun = async (user, id) => {
   await user.click(screen.getByTestId(`run-${id}`));
   await user.click(await screen.findByTestId("gate-confirm"));
 };
 
 describe("Run progress and automatic log retrieval", () => {
-  it("Mock shows the same two phases (a short simulated delay), keeps the replay banner, then opens the Trace with the recorded entry", async () => {
+  it("Mock shows the same two phases (a short simulated delay), keeps the replay banner, stays on the Run page, and Open trace shows the recorded entry", async () => {
     lab = await startLab({ opts: { mockDelayMs: 500 } });
     const user = userEvent.setup();
     render(<App />);
@@ -320,12 +344,17 @@ describe("Run progress and automatic log retrieval", () => {
     await waitFor(() => expect(screen.getByTestId("busy-mcp-allowed-key").textContent).toMatch(/Fetching the log entry \(simulated delay\)/), { timeout: 3000 });
     expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
     expect(screen.getByTestId("run-mcp-allowed-key")).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId("run-mcp-allowed-key")).not.toBeDisabled(), { timeout: 5000 });
+    expect(screen.getByTestId("run-page")).toBeInTheDocument();
+    expect(screen.getByTestId("run-mcp-allowed-key")).toHaveFocus();
+    expect(within(screen.getByTestId("case-mcp-allowed-key")).getByLabelText("score")).toBeInTheDocument();
+    await openTrace(user, "mcp-allowed-key");
     await screen.findByTestId("lines-gateway-log", {}, { timeout: 5000 });
     expect(screen.getByTestId("retrieval").textContent).toMatch(/recording/);
     expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
   });
 
-  it("Real: Sending... then Fetching the log entry... then the Trace opens by itself with the entry matched by the run marker", async () => {
+  it("Real: Sending... then Fetching the log entry... then Open trace shows the entry matched by the run marker", async () => {
     const gw = await fakeGw({ delayMs: 150 }); const proxy = await fakeProxy(gw, { mode: "ok", delayMs: 300 });
     lab = await realLab(gw, proxy);
     const user = userEvent.setup();
@@ -335,6 +364,9 @@ describe("Run progress and automatic log retrieval", () => {
       await confirmAndRun(user, "mcp-allowed-key");
       await waitFor(() => expect(screen.getByTestId("busy-mcp-allowed-key").textContent).toMatch(/Sending\.\.\./), { timeout: 3000 });
       await waitFor(() => expect(screen.getByTestId("busy-mcp-allowed-key").textContent).toMatch(/Fetching the log entry\.\.\./), { timeout: 5000 });
+      await waitFor(() => expect(screen.queryByTestId("busy-mcp-allowed-key")).toBeNull(), { timeout: 8000 });
+      expect(screen.getByTestId("run-page")).toBeInTheDocument();
+      await openTrace(user, "mcp-allowed-key");
       await screen.findByTestId("lines-k8s-pod", {}, { timeout: 8000 });
       expect(screen.getByTestId("trace-marker").textContent).toMatch(/^audit-[0-9a-f]{8}$/);
       const methods = screen.getAllByTestId("entry-method").map((e) => e.textContent);
