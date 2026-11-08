@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (workload token)
+
+- Valid workload token: the lab mints the token itself (ES256, 300 s, key derived from `PRIV_LOG_FED_SIGNING_SEED`, audience from `PRIV_LOG_FED_AUDIENCE`). `npm run fed-key` makes the seed. The case card and `GET /api/fed-setup` show the public issuer, subject and JWKS, plus the console steps. A pasted token still overrides the minted one. Acceptance on a real door is UNVERIFIED.
+
 ## Unreleased (bridge)
 
 - Privilege logs bridge (`npm run bridge`): copies policy-decision-log, aiguard-log and agent-approval-log through the console into the SIEM index under their own ids, every minute, with a 10-minute overlap and a saved position; the doctor reports its last pass.

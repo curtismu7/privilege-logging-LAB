@@ -8,7 +8,8 @@ import express from 'express';
 import { hostCheck, sameOriginWrites } from './safety.js';
 import { createHealth } from './health.js';
 import { loadCapture } from './capture.js';
-import { bearerFromSettings, modeFrom, realConfig } from './config.js';
+import { bearerFromSettings, fedConfig, modeFrom, realConfig } from './config.js';
+import { FED_ISSUER, FED_SUBJECT, FED_TOKEN_LIFE_SEC, MINTED_CASE, SEED, signerFrom } from './fedIssuer.js';
 import { RealError, createRealClient } from './realClient.js';
 import { setAllowedHosts } from './netguard.js';
 import { EXTRA_SINKS, REAL_ONLY_NOTE, attachPasted, caseSummary, fetchAttempt, mockFetch, mockSend, realSend, scorePasted, scorecardRows, toMarkdown } from './lab.js';
@@ -51,6 +52,16 @@ export function createApp({
   const signature = (c) => `${c.gateway.origin}|${c.search ? c.search.origin : ''}|${c.k8s ? c.k8s.origin : ''}|${c.decisions ? c.decisions.origin : ''}`;
   // A per-case credential only the owner has: the write-only field (this tab) wins over PRIV_LOG_BEARER_<CASEID>. Never returned by any API.
   const bearerOf = (ws, id) => workspaces.state(ws).bearers.get(id) || bearerFromSettings(id, env, settingsOpts);
+  // The lab's own issuer for the "Valid workload token" case: the public half and whether a token can be minted. The seed never leaves.
+  const fed = () => {
+    const f = fedConfig(env, settingsOpts);
+    let signer = null; let problem = f.problem;
+    if (f.seed && SEED.test(f.seed)) { try { signer = signerFrom(f.seed); } catch { signer = null; problem = 'PRIV_LOG_FED_SIGNING_SEED is not a valid P-256 key (run npm run fed-key for a new one)'; } }
+    return { signer, audience: f.audience, problem, ready: !!signer && !problem };
+  };
+  // The credential a case sends: the owner's pasted or configured bearer, else (for the minted case) a fresh token from the lab's issuer.
+  const credentialFor = (ws, id) => { const b = bearerOf(ws, id); if (b || id !== MINTED_CASE) return b; const f = fed(); return f.ready ? f.signer.mint(f.audience, { now }) : undefined; };
+  const credentialReady = (ws, id) => !!bearerOf(ws, id) || (id === MINTED_CASE && fed().ready);
   const sourcesInfo = (c) => (c.ok ? sourcesFrom(c).map((x) => ({ id: x.id, label: x.label, origin: x.origin })) : []);
 
   const api = express.Router();
@@ -96,7 +107,7 @@ export function createApp({
   });
 
   api.get('/story', (_req, res) => { noStore(res); res.json(buildStory(capture)); });
-  api.get('/cases', withWorkspace((ws, _req, res) => res.json({ groups: [...new Set(allCases.map((c) => c.group))], cases: allCases.map((c) => caseSummary(c, { bearerConfigured: !!bearerOf(ws, c.id) })) })));
+  api.get('/cases', withWorkspace((ws, _req, res) => res.json({ groups: [...new Set(allCases.map((c) => c.group))], cases: allCases.map((c) => caseSummary(c, { bearerConfigured: credentialReady(ws, c.id) })) })));
   // A write-only credential for one case (a revoked key, a federated token). Stored in memory for this tab only; the answer says only whether one is set.
   api.post('/bearer', withWorkspace((ws, req, res) => {
     if (!exactBody(req.body, ['caseId', 'bearer']) || typeof req.body.caseId !== 'string' || typeof req.body.bearer !== 'string') return res.status(400).json({ error: 'bad_request', detail: 'body must be { caseId, bearer }' });
@@ -106,8 +117,14 @@ export function createApp({
     if (b.length > 2048 || /[\s\u0000-\u001f]/.test(b)) return res.status(400).json({ error: 'bad_bearer', detail: 'a bearer is up to 2048 characters with no spaces or control characters' });
     const st = workspaces.state(ws);
     if (b) st.bearers.set(c.id, b); else st.bearers.delete(c.id);
-    return res.json({ caseId: c.id, configured: !!bearerOf(ws, c.id) });
+    return res.json({ caseId: c.id, configured: credentialReady(ws, c.id) });
   }));
+  // Public setup facts for the lab's workload-token issuer: what to enter in the Federated Identity, and whether it is ready. No secret.
+  api.get('/fed-setup', (_req, res) => {
+    noStore(res);
+    const f = fed();
+    res.json({ caseId: MINTED_CASE, issuer: FED_ISSUER, subject: FED_SUBJECT, tokenLifeSec: FED_TOKEN_LIFE_SEC, keyConfigured: !!f.signer, audience: f.audience, kid: f.signer?.kid || null, jwks: f.signer?.jwks || null, ready: f.ready, problem: f.problem });
+  });
   api.get('/sinks', (_req, res) => {
     noStore(res);
     // Per sink, from the capture: how many cases it was read for, how many held lines, and how many lines in all.
@@ -152,7 +169,7 @@ export function createApp({
     if (workspaces.state(ws).confirmed !== signature(conf)) {
       return res.status(412).json({ error: 'confirm_required', detail: 'Real mode sends requests to your gateway. Confirm the origins first.', gatewayOrigin: conf.gateway.origin, searchOrigin: conf.search ? conf.search.origin : null, k8sOrigin: conf.k8s ? conf.k8s.origin : null, decisionsOrigin: conf.decisions ? conf.decisions.origin : null });
     }
-    const bearer = c.request.auth === 'bearer' ? bearerOf(ws, c.id) : undefined;
+    const bearer = c.request.auth === 'bearer' ? credentialFor(ws, c.id) : undefined;
     const client = clientFor(conf, bearer);
     try {
       const result = await realSend(c, { client, cfg: conf, bearer, now, since });

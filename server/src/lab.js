@@ -5,6 +5,7 @@ import { scoreLines, diffScores } from './scorer.js';
 import { newTrace, formatTraceparent } from './trace.js';
 import { GENERATED, makeMarker, notRunnable, rpcFor, rpcWithMarker, runMcp } from './mcpRunner.js';
 import { matchEntry } from './matcher.js';
+import { MINTED_CASE } from './fedIssuer.js';
 import { redactLine } from './redact.js';
 import { readSource, sourcesFrom } from './logSources.js';
 import { RealError } from './realClient.js';
@@ -41,7 +42,7 @@ export function caseSummary(c, { bearerConfigured = false } = {}) {
   return {
     id: c.id, group: c.group, title: c.title, identity: c.identity, request: c.request, realRunnable: why === null, realNote: why,
     realOnly: c.realOnly === true, needs: c.needs || [], consoleAction: c.consoleAction === true, heldCall: c.heldCall === true,
-    needsBearer: c.request.auth === 'bearer' && !GENERATED[c.id], generatedCredential: GENERATED[c.id] || null, path: HAPPY_PATH.has(c.id) ? 'happy' : 'failure', bearerConfigured, mockNote: c.realOnly ? REAL_ONLY_NOTE : null,
+    needsBearer: c.request.auth === 'bearer' && !GENERATED[c.id], generatedCredential: GENERATED[c.id] || null, mintsToken: c.id === MINTED_CASE, path: HAPPY_PATH.has(c.id) ? 'happy' : 'failure', bearerConfigured, mockNote: c.realOnly ? REAL_ONLY_NOTE : null,
   };
 }
 

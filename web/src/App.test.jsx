@@ -433,4 +433,29 @@ describe("Real-only (not yet measured) cases", () => {
       await waitFor(() => expect(screen.queryByTestId("bearer-on-keys-revoked")).toBeNull());
     } finally { await gw.close(); await proxy.close(); }
   }, 30000);
+  it("Real: the valid workload token case shows the issuer setup steps until the lab can mint, then says the lab mints the token", async () => {
+    const gw = await fakeGw();
+    lab = await realLab(gw);
+    try {
+      render(<App />);
+      const panel = await screen.findByTestId("fed-setup");
+      expect(panel).toHaveAttribute("open");
+      expect(screen.getByTestId("fed-not-ready")).toBeInTheDocument();
+      expect(screen.getByTestId("fed-issuer").textContent).toBe("https://privilege-logging-lab.invalid/workload");
+      expect(screen.getByTestId("fed-problem").textContent).toMatch(/npm run fed-key/);
+      expect(screen.queryByTestId("fed-jwks")).toBeNull();
+      expect(screen.getByTestId("run-fed-valid-token")).toBeDisabled();
+    } finally { await gw.close(); }
+    await lab.close?.(); lab = null;
+    const gw2 = await fakeGw();
+    lab = await startLab({ env: { STANDALONE_ENV: "/nonexistent/settings.env", PRIV_LOG_GATEWAY_URL: gw2.url, PRIV_LOG_AGENT_KEY: KEY, PRIV_LOG_FED_SIGNING_SEED: "11".repeat(32), PRIV_LOG_FED_AUDIENCE: "priv-nhi-test-NOT-REAL" } });
+    try {
+      cleanup(); render(<App />);
+      await screen.findByTestId("fed-ready");
+      expect(screen.getByTestId("fed-setup")).not.toHaveAttribute("open");
+      expect(JSON.parse(screen.getByTestId("fed-jwks").textContent).keys[0].alg).toBe("ES256");
+      expect(document.body.textContent).not.toContain("11".repeat(32));
+      expect(screen.getByTestId("run-fed-valid-token")).not.toBeDisabled();
+    } finally { await gw2.close(); }
+  }, 30000);
 });
