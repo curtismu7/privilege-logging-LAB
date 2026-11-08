@@ -143,6 +143,8 @@ export default function App() {
     if (el && !el.disabled && (!at || at === document.body || at.disabled || !at.isConnected)) el.focus();
     setFocusReq(null);
   }, [focusReq, running, nav]);
+  // A single Run from the Run page confirms inside that case's card (no jump to the top of the page).
+  const inlineGate = nav.tab === "run" && gate?.queue?.length === 1 ? gate.queue[0] : null;
   const onConfirm = async () => {
     const { queue, openTrace } = gate;
     const res = await confirmGateway(gate.gatewayOrigin);
@@ -223,10 +225,10 @@ export default function App() {
             {say.map((t) => <p key={t.id}><strong>{t.title}.</strong> {t.say}</p>)}
           </aside>
         )}
-        <ConfirmGate gate={gate} onConfirm={onConfirm} onCancel={() => setGate(null)} busy={!!running} />
+        {!inlineGate && <ConfirmGate gate={gate} onConfirm={onConfirm} onCancel={() => setGate(null)} busy={!!running} />}
         {error ? <p className="field-error" role="alert">Could not load the lab ({error}). Is the server running?</p> : !story || !cases || !sinkInfo ? <p className="muted">Loading...</p> : (
           <>
-            {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
+            {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} gate={inlineGate ? gate : null} onConfirm={onConfirm} onCancelGate={() => setGate(null)} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "privilege" && <PrivilegePage info={info} signal={signal} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
             {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id], { from: "trace-run" })} onRetry={retry} onChanged={loadRuns} running={running} />}
             {nav.tab === "scorecard" && <ScorecardPage info={info} runsSignal={`${signal}:${Object.keys(runs).length}:${Object.values(runs).map((r) => `${r.ranAt}${r.scored}${r.logged.length}`).join("")}`} onOpen={(id) => go("trace", id)} />}

@@ -257,6 +257,8 @@ describe("Real mode (against a fake gateway)", () => {
       // first send: the gate appears and nothing is sent yet
       await user.click(screen.getByTestId("run-mcp-allowed-key"));
       const gate = await screen.findByTestId("confirm-gate");
+      expect(screen.getByTestId("case-mcp-allowed-key").contains(gate)).toBe(true); // confirmed in the card that was run, not at the top
+      expect(screen.getByTestId("gate-confirm")).toHaveFocus();
       expect(screen.getByTestId("gate-gateway").textContent).toBe(new URL(gw.url).origin);
       expect(screen.queryByTestId("open-mcp-allowed-key")).toBeNull();
       await user.click(screen.getByTestId("gate-confirm"));

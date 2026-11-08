@@ -159,3 +159,7 @@ button.primary:disabled { background: var(--surface-2); color: var(--muted); bor
 .etag--on { background: var(--accent); color: var(--on-accent); border-color: var(--on-accent-border); }
 .etag__n { opacity: 0.75; }
 .etag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The confirm gate inside a case card (single Run): same warning edge as the top-level gate, no nested card. */
+.gate-inline { margin: 0.5rem 0; padding: 0.6rem 0.75rem; border: 1px solid var(--status-warn); border-left-width: 4px; border-radius: 8px; background: var(--surface-2); }
+.gate-inline__title { font-size: 0.95rem; margin: 0 0 0.35rem; }
+.gate-inline p { margin: 0.3rem 0; overflow-wrap: anywhere; }

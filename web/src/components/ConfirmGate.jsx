@@ -1,20 +1,22 @@
 import { useEffect, useRef } from "react";
 
 // The confirm gate before the first Real send (per browser tab). Names the origins; nothing is sent until the button is pressed.
-// It renders at the top of the page, so when it opens it is scrolled into view and takes focus: a Run pressed far down the page
-// must not look like it did nothing.
-export default function ConfirmGate({ gate, onConfirm, onCancel, busy }) {
+// inline: drawn inside the case card whose Run was pressed, so the page does not move; focus goes to the Send button without scrolling.
+// Otherwise (Run all, the Privilege page) it renders at the top of the page and is scrolled into view, so a press far down the page
+// does not look like it did nothing.
+export default function ConfirmGate({ gate, onConfirm, onCancel, busy, inline = false }) {
   const ref = useRef(null);
   const open = !!gate;
   useEffect(() => {
     if (!open || !ref.current) return;
+    if (inline) { ref.current.querySelector("[data-testid=gate-confirm]")?.focus({ preventScroll: true }); return; }
     ref.current.scrollIntoView({ block: "center" });
     ref.current.focus();
-  }, [open]);
+  }, [open, inline]);
   if (!gate) return null;
   return (
-    <section ref={ref} tabIndex={-1} className="card card--warn" role="alertdialog" aria-labelledby="gate-title" data-testid="confirm-gate">
-      <h2 id="gate-title" className="card__title">Confirm before the first Real send</h2>
+    <section ref={ref} tabIndex={-1} className={inline ? "gate-inline" : "card card--warn"} role="alertdialog" aria-labelledby="gate-title" data-testid="confirm-gate">
+      <h2 id="gate-title" className={inline ? "gate-inline__title" : "card__title"}>Confirm before the first Real send</h2>
       <p>Real mode sends MCP requests that carry your agent key to this gateway:</p>
       <p><code data-testid="gate-gateway">{gate.gatewayOrigin}</code></p>
       {(() => {

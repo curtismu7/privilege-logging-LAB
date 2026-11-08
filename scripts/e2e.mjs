@@ -199,7 +199,10 @@ async function realProof(browser) {
   await p.goto(app.url); await p.waitForSelector('[data-testid=run-page]');
   check('real: default mode is Real when configured, banner is live and says owner-run', (await p.getAttribute('[data-testid=mode-real]', 'aria-pressed')) === 'true' && /REAL \(owner-run\)/.test(await p.textContent('[data-testid=banner]')) && (await p.getAttribute('[data-testid=banner]', 'data-state')) === 'live');
   await shot(p, 'real-run');
+  await p.locator('[data-testid=case-mcp-allowed-key]').scrollIntoViewIfNeeded(); await p.evaluate(() => window.scrollBy(0, 300));
+  const yRun = await p.evaluate(() => window.scrollY);
   await p.click('[data-testid=run-mcp-allowed-key]'); await p.waitForSelector('[data-testid=confirm-gate]');
+  check('real: the confirm gate opens inside the case card and the page does not scroll', (await p.locator('[data-testid=case-mcp-allowed-key] [data-testid=confirm-gate]').count()) === 1 && Math.abs((await p.evaluate(() => window.scrollY)) - yRun) < 2);
   check('real: confirm gate names the gateway and the k8s origin and nothing was sent yet', (await p.textContent('[data-testid=gate-gateway]')) === new URL(gw.url).origin && gw.requests.length === 0 && k8s.requests.length === 0);
   await p.click('[data-testid=gate-confirm]');
   await p.waitForFunction(() => /Sending|Fetching the log entry/.test(document.querySelector('[data-testid=busy-mcp-allowed-key]')?.textContent || ''));
@@ -208,6 +211,7 @@ async function realProof(browser) {
   await shot(p, 'real-fetching');
   await p.waitForSelector('[data-testid=open-mcp-allowed-key]', { timeout: 20000 });
   await p.waitForFunction(() => !document.querySelector('[data-testid=busy-mcp-allowed-key]'), null, { timeout: 20000 });
+  check('real: after Send and the run, the page is still where it was', Math.abs((await p.evaluate(() => window.scrollY)) - yRun) < 40, `moved ${Math.round((await p.evaluate(() => window.scrollY)) - yRun)} px`);
   check('real: after the entry is fetched the page stays on Run (Open trace is a separate click)', (await p.locator('[data-testid=run-page]').count()) === 1 && (await p.locator('[data-testid=trace-page]').count()) === 0);
   await p.click('[data-testid=open-mcp-allowed-key]');
   await p.waitForSelector('[data-testid=lines-k8s-pod]', { timeout: 20000 });
