@@ -18,7 +18,7 @@ Open it: <http://127.0.0.1:7801/>
 
 | | Mock | Real (owner-run) |
 | --- | --- | --- |
-| What it does | Replays 17 transactions **measured on 2026-11-07** (5 log sinks). Nothing is sent. | Sends the case to **your** gateway over MCP streamable HTTP (initialize, notifications/initialized, then the call, with `Mcp-Session-Id`), `traceparent` on every hop, then **fetches the log entry for that call by itself**. |
+| What it does | Replays 17 transactions **measured on 2026-11-07**. 3 of the 5 log sinks were read (gateway pod log, Elasticsearch, OpenSearch); the response header and the console were not, so they are UNVERIFIED. Nothing is sent. | Sends the case to **your** gateway over MCP streamable HTTP (initialize, notifications/initialized, then the call, with `Mcp-Session-Id`), `traceparent` on every hop, then **fetches the log entry for that call by itself**. |
 | Progress | Same two phases as Real, with a short fixed simulated delay: "Sending..." then "Fetching the log entry (simulated delay)...", then the recorded entry. The banner still says it is a replay. | A spinner (role=status, aria-busy, reduced-motion aware): "Sending..." then "Fetching the log entry...", retrying about once a second for up to 15 s and stopping as soon as the entry is found. Failures are explicit with a Retry: "Log source not reachable", "No entry found within 15 s". |
 | Network | None. A netguard blocks every non-loopback socket, DNS lookup and fetch, with a self-test and a test that asserts zero attempts. | Only the origins you configure (gateway, log source): https, or http on loopback. No redirects followed, 8 s and 256 KB (1 MB for pod logs) caps, SSRF guard, a confirm gate before the first send. |
 | Log source | The recorded sample lines. | A Kubernetes pod log through `kubectl proxy`, and/or a search endpoint (Elasticsearch/OpenSearch `_search`). With neither configured, Real says so and the **paste box** is the fallback. |
@@ -56,7 +56,7 @@ The lab then GETs `/api/v1/namespaces/<ns>/pods/<pod>/log?container=<c>&sinceSec
 1. **Run**: use cases grouped MCP, AI Guard, Rejected, Aggregate, A2A, LLM, Intent, a Run button each and Run all.
 2. **Trace**: the request, the response (HTTP and JSON-RPC `isError`), the raw hops, and per-sink panels where **every log entry is a syntax-coloured JSON tree**: logrus text lines (`time`, `level`, `msg`, `file`, then key=value pairs) and JSON records (such as the AI Guard record) are parsed, anything else is one string node, nothing is dropped. Collapse or expand per node (arrow keys, `role=tree`), Expand all / Collapse all, a Raw toggle, Copy JSON (redacted). The user, agent, tool and decision values are badged and underlined in the tree with a legend, each entry is tagged by how it was matched (marker, inferred time window, recorded sample, pasted), and missing fields are listed as "not present in this entry". Rendering is React text only (no `innerHTML`), by an iterative walker with depth, node and string caps.
 3. **Scorecard**: use cases by the four clauses with met / partial / missing / n/a chips and the note. **Copy as Markdown table** for a customer email.
-4. **Where it's logged**: the five sinks, what each held, and an honest "what we cannot see" list.
+4. **Where it's logged**: the five sinks, what each held for the cases it was read for (two were never read: UNVERIFIED), and an honest "what we cannot see" list.
 5. **Diagram**: one ReactFlow diagram per flow, caller to Privilege gateway to backend with the sinks hanging off the gateway. Drawn from `diagram-studio/1` data (`server/diagrams/*.json`, built from the capture), movable boxes, Simulate, speed control, Reset restores positions.
 6. **Talk track**, presenter mode (`P`), theme picker (auto / light / dark), Reset.
 
@@ -106,15 +106,15 @@ The **Privilege -> Elasticsearch** tab shows only Privilege's own entries for a 
 Per field, from the lines of one call: **met** (a line names the value), **partial** (only implied or weak), **missing** (nothing says it). **n/a** is never decided from lines; the use case supplies it.
 
 - user: access-token line, `Principal {User ...}`, a denial line naming the user, a JSON/logfmt `User`.
-- agent: a named client or key is met; an OAuth client id (UUID, long hex, or a name with "oauth") or a bare `agent=true` is partial (a heuristic: a log line cannot say whether a client is an agent).
+- agent: a named client or key is met (taken as the agent or key: a log line cannot prove it); an OAuth client id (UUID, long hex, or a name with "oauth") or a bare `agent=true` is partial (a heuristic: a log line cannot say whether a client is an agent).
 - tool: `MCP call detected ... target: <tool>`, a `tools/call` payload, a `tool` key; a tool named only because it was *removed* from a list is partial.
-- decision: an explicit policy denial, a guardrail block or a decision key is met; an app-level permission line, an authentication refusal and similar are partial (the decision is implied).
+- decision: an explicit policy denial (`policy denied`, `Access Denied` on a `[mcpgw]` line, a denied/forbidden event) or a decision key is met; an app-level permission line, an authentication refusal, a guardrail block (`aiguard: blocked`, a blocked event: a guardrail verdict, not an authorization decision) and `Access Denied` text off a gateway line are partial. An `aiintent: ... unavailable` warning is no decision evidence (missing).
 
-Pinned against the capture: the scorer reproduces the recorded score for all but five documented differences (the capture keeps only sample lines, and one record was judged on its own). Mutation tests remove lines and the score drops. Input is bounded and parsed in one linear pass (no ReDoS, no `eval`, iterative JSON walk).
+Pinned against the capture: the scorer reproduces the recorded score for all but five documented differences (8 field levels; the capture keeps only sample lines, and one record was judged on its own). Each differing field says so in its score note, so the Scorecard and the Markdown export carry it. A tools/list call is n/a for tool (it calls no tool). Mutation tests remove lines and the score drops. Input is bounded and parsed in one linear pass (no ReDoS, no `eval`, iterative JSON walk).
 
 ## What the capture says, in short
 
-Run the Scorecard for the table. Headlines, all from the 2026-11-07 capture of one gateway build: the pod log is the only sink with per-call lines; no allowed call has an explicit allow line; rejected calls name no user, agent or tool; the aggregate, A2A and LLM routes log little or nothing; the SIEM index held console changes only; the OpenSearch shipper had not delivered since 2026-10-26. The `X-Gw-Audit-Trail` response header and the console Activity Log were **not captured: UNVERIFIED**.
+Run the Scorecard for the table. Headlines, all from the 2026-11-07 capture of one gateway build: the pod log is the only sink with per-call lines; no allowed call has an explicit allow line; the 401 rejections and the aggregate and LLM refusals name no user or agent, while the MCP policy denials (403) and the AI Guard block name the user (and agent=true or the client) but no tool; the aggregate and LLM routes log little or nothing; A2A was measured on one call that failed (backend down), so a successful A2A call is not measured; the SIEM index held console changes only; the OpenSearch shipper had not delivered since 2026-10-26. The `X-Gw-Audit-Trail` response header and the console Activity Log were **not captured: UNVERIFIED**.
 
 ## Safety
 

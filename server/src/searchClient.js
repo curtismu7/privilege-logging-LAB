@@ -10,7 +10,7 @@ export async function searchWindow({ client, searchUrl, index, fromMs, toMs, tra
   const path = `${index ? `/${encodeURIComponent(index).replace(/%2C/gi, ',').replace(/%2A/g, '*')}` : ''}/_search`;
   const url = new URL(path, searchUrl).href;
   const span = trace.span();
-  const body = JSON.stringify({ size: Math.min(size, MAX_LINES), sort: [{ '@timestamp': 'asc' }], query: { range: { '@timestamp': { gte: new Date(fromMs).toISOString(), lte: new Date(toMs).toISOString() } } } });
+  const body = JSON.stringify({ size: Math.min(size, MAX_LINES), sort: [{ '@timestamp': 'desc' }], query: { range: { '@timestamp': { gte: new Date(fromMs).toISOString(), lte: new Date(toMs).toISOString() } } } });
   const headers = { 'content-type': 'application/json', accept: 'application/json', traceparent: formatTraceparent(trace.traceId, span) };
   const res = await client.request({ url, method: 'POST', headers, body });
   let hits = null;
@@ -19,10 +19,11 @@ export async function searchWindow({ client, searchUrl, index, fromMs, toMs, tra
   if (res.redirect) throw Object.assign(new RealError('redirect_refused', 'the search endpoint answered a redirect; redirects are never followed', 502), { hop });
   if (res.status < 200 || res.status >= 300) throw Object.assign(new RealError('search_failed', `search answered HTTP ${res.status}`, 502), { hop });
   if (!Array.isArray(hits)) throw Object.assign(new RealError('search_bad_shape', 'search answer has no hits.hits array', 502), { hop });
-  const lines = hits.slice(0, MAX_LINES).map((h) => {
+  // Newest first, so a busy window keeps its NEWEST events (the call just made); back to log order for the matcher and the scorer.
+  const lines = hits.slice(0, MAX_LINES).reverse().map((h) => {
     const t = h?._source?.['@timestamp'] ?? h?._source?.timestamp;
     const ts = typeof t === 'string' || typeof t === 'number' ? Date.parse(t) : NaN;
     return { text: hitLine(h), ts: Number.isFinite(ts) ? ts : null };
   });
-  return { hop, lines, total: hits.length };
+  return { hop, lines, total: hits.length, truncated: hits.length >= Math.min(size, MAX_LINES) };
 }

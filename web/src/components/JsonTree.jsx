@@ -7,7 +7,7 @@ import { visible } from "../safeText";
 // The legend for the four requirement fields. Every badge carries its word, never colour alone.
 export function FieldLegend() {
   return (
-    <p className="legend" data-testid="field-legend" aria-label="Legend: where the four requirement fields live in an entry">
+    <p className="legend" data-testid="field-legend" role="group" aria-label="Legend: where the four requirement fields live in an entry">
       <span className="muted">In the entry:</span>
       {FIELDS.map((f) => <span key={f} className={`fbadge fbadge--${f}`} data-field={f}>{FIELD_LABEL[f]}</span>)}
       <span className="muted">(user, agent or client, tool, policy decision)</span>
@@ -62,7 +62,9 @@ export default function JsonTree({ value, raw, marks = [], label = "Log entry", 
     else if ((e.key === "Enter" || e.key === " ") && isC) { e.preventDefault(); toggle(node.path); }
   };
 
-  const copy = async () => { const ok = await copyToClipboard(redactText(toJsonText(value))); setCopied(ok ? "Copied (redacted JSON)." : "Copy was blocked."); };
+  // A line that parsed to one string (plain text) has nothing to expand and is not JSON: its toolbar is Raw and Copy line only.
+  const isDoc = value !== null && typeof value === "object";
+  const copy = async () => { const ok = await copyToClipboard(redactText(isDoc ? toJsonText(value) : String(raw ?? value))); setCopied(ok ? `Copied (redacted ${isDoc ? "JSON" : "line"}).` : "Copy was blocked."); };
   const fieldsOfNode = (node) => {
     if (node.value === undefined || node.value === null) return [];
     const s = String(node.value);
@@ -73,10 +75,10 @@ export default function JsonTree({ value, raw, marks = [], label = "Log entry", 
   return (
     <div className="jt" data-testid={testId}>
       <div className="jt__bar" role="toolbar" aria-label={`${label} controls`}>
-        <button type="button" onClick={() => setExpanded(new Set(containerPaths(tree)))} data-testid={`${testId}-expand`}>Expand all</button>
-        <button type="button" onClick={() => setExpanded(new Set())} data-testid={`${testId}-collapse`}>Collapse all</button>
+        {isDoc && <button type="button" onClick={() => setExpanded(new Set(containerPaths(tree)))} data-testid={`${testId}-expand`}>Expand all</button>}
+        {isDoc && <button type="button" onClick={() => setExpanded(new Set())} data-testid={`${testId}-collapse`}>Collapse all</button>}
         <button type="button" aria-pressed={showRaw} onClick={() => setShowRaw((v) => !v)} data-testid={`${testId}-raw`}>Raw</button>
-        <button type="button" onClick={copy} data-testid={`${testId}-copy`}>Copy JSON</button>
+        <button type="button" onClick={copy} data-testid={`${testId}-copy`}>{isDoc ? "Copy JSON" : "Copy line"}</button>
         <span role="status" aria-live="polite" className="muted" data-testid={`${testId}-copied`}>{copied}</span>
       </div>
       {showRaw ? <pre className="code jt__raw" data-testid={`${testId}-rawtext`}>{visible(raw ?? toJsonText(value))}</pre> : (

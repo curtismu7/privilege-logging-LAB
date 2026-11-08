@@ -6,7 +6,8 @@
 //     (loopback hosts excepted, on purpose, for a gateway on this machine); the checked address is the one connected to (no re-resolve);
 //   - redirects are NEVER followed: a 3xx comes back as a response with `redirect: true` (so a cross-origin Location is never contacted);
 //   - time cap (whole request) and body size cap (reading stops at the cap, `truncated: true`);
-//   - the secrets it was given are redacted from every string it hands back (request echo, response text, error messages).
+//   - the secrets it was given are redacted from every string it hands back (request echo, response text, response header values,
+//     error messages): a gateway or proxy that reflects the Authorization value in a header must not hand the key back.
 import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
@@ -73,7 +74,7 @@ export function createRealClient({ origins, secrets = [], lookup = dns.lookup, t
         res.on('close', () => finish(resolve, shape(res, chunks, truncated)));
       });
       const shape = (res, chunks, truncated) => ({
-        status: res.statusCode, redirect: res.statusCode >= 300 && res.statusCode < 400, headers: lower(res.headers),
+        status: res.statusCode, redirect: res.statusCode >= 300 && res.statusCode < 400, headers: Object.fromEntries(Object.entries(lower(res.headers)).map(([k, v]) => [k, redact(v)])),
         text: redact(Buffer.concat(chunks).toString('utf8')), truncated, ms: now() - started,
       });
       const wrap = (e) => (e instanceof RealError ? new RealError(e.code, redact(e.detail), e.status) : new RealError(e.code === 'ECONNREFUSED' ? 'connect_refused' : 'network_error', redact(`${e.code || 'error'}: ${e.message}`.slice(0, 200))));

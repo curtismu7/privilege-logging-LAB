@@ -32,6 +32,18 @@ test('marker first: the line with the marker is "marker"; neighbours within the 
   assert.deepEqual(far.lines.map((x) => x.text), ['payload audit-ab12cd34']);
 });
 
+test('a line carrying ANOTHER run\'s marker is not this call\'s marker line (every marker starts with "audit-")', () => {
+  const r = run([L('payload {"city":"audit-ab99ffff"}', T0 + 50)], { windowAllowed: false });
+  assert.equal(r.state, 'none'); assert.deepEqual(r.lines, []);
+  const w = run([L('payload {"city":"audit-ab99ffff"}', T0 + 50)]);
+  assert.ok(!w.lines.some((x) => x.method === 'marker'), 'a foreign marker is never an exact match');
+});
+
+test('a neighbour more than the tight span BEFORE the marker line is excluded, even inside the call window', () => {
+  const r = run([L('early neighbour, inside the call window', T0 - 900), L('close neighbour before', T0 + 1500 - 1400), L('payload audit-ab12cd34', T0 + 1500)]);
+  assert.deepEqual(r.lines.map((x) => x.text), ['close neighbour before', 'payload audit-ab12cd34']);
+});
+
 test('marker not logged: falls back to the call window, every line "window" (inferred), edges inclusive', () => {
   const r = run([
     L('before the window', T0 - 1001),

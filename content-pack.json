@@ -184,12 +184,12 @@
     {
       "id": "S07",
       "title": "Say the gaps out loud",
-      "say": "Rejected calls name nobody. Aggregate routes log almost nothing for the member calls. The LLM route logged nothing we could find. No allowed call has an explicit allow line. Naming these is what makes the rest credible."
+      "say": "The 401 rejections and the aggregate and LLM refusals name nobody; the MCP policy denials name the user and agent=true but not the tool. Aggregate routes log almost nothing for the member calls. The LLM route logged nothing we could find. A2A was measured on one call that failed because the backend was down, so a successful A2A call is not measured. No allowed call has an explicit allow line. Naming these is what makes the rest credible."
     },
     {
       "id": "S08",
       "title": "Where it is logged",
-      "say": "There are five places a record could land. Only the gateway pod log carried per-call lines, the SIEM index held console changes only, and the shipper to OpenSearch has not delivered since late October. The response header is described but was not captured, so we say UNVERIFIED."
+      "say": "There are five places a record could land. Only the gateway pod log carried per-call lines, the SIEM index held console changes only, and the shipper to OpenSearch has not delivered since late October. The response header was not captured and the console was not read for these cases, so both are UNVERIFIED."
     },
     {
       "id": "S09",

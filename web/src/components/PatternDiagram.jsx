@@ -6,7 +6,10 @@ import { useDiagramStepper } from "../hooks/useDiagramStepper";
 import { REFIT_EVENT, useFitOnResize } from "../hooks/useFitOnResize";
 import "./PatternDiagram.css";
 
-const FIT = { padding: 0.08 };
+// Never fit below MIN_ZOOM: at 375 px a full fit went to 0.30 and the 13 px box text rendered at about 4 px. At 0.7 it stays
+// about 9 px; a wide diagram then pans (drag the canvas) or zooms with the controls instead of shrinking out of reading range.
+export const MIN_ZOOM = 0.7;
+const FIT = { padding: 0.08, minZoom: MIN_ZOOM };
 const HANDLES = [["t", Position.Top], ["b", Position.Bottom], ["l", Position.Left], ["r", Position.Right]];
 
 function Box({ data }) {
@@ -48,6 +51,15 @@ export function labelOffsets(steps) {
   });
 }
 
+// Controlled nodes: React Flow only reports changes. Selection (Enter or Space on a focused box) and position changes (arrow keys
+// on a selected box, or a drag) are applied here, so keyboard users can move boxes as well as mouse users.
+export function applyNodeChanges(changes, { onMove, onSelect }) {
+  for (const c of changes) {
+    if (c.type === "position" && c.position) onMove(c.id, c.position);
+    else if (c.type === "select") onSelect(c.id, c.selected);
+  }
+}
+
 // Pick the sides of the two boxes that face each other, so an arrow leaves toward its target.
 function sides(a, b) {
   const dx = b.x - a.x, dy = b.y - a.y;
@@ -56,10 +68,13 @@ function sides(a, b) {
 
 function Canvas({ pattern, positions, onMove, stepper }) {
   const ref = useRef(null);
+  const [selected, setSelected] = useState(null);
   useFitOnResize(ref, FIT);
+  const onSelect = useCallback((id, on) => setSelected((cur) => (on ? id : cur === id ? null : cur)), []);
   const active = stepper.step >= 0 ? pattern.steps[stepper.step] : null;
   const nodes = pattern.nodes.map((n) => ({
-    id: n.id, type: "box", position: positions[n.id], draggable: true,
+    id: n.id, type: "box", position: positions[n.id], draggable: true, selected: selected === n.id,
+    ariaLabel: `${n.label}: box. Press Enter to select, then the arrow keys to move it.`,
     data: { label: n.label, kind: n.kind, on: !!active && (active.from === n.id || active.to === n.id) },
   }));
   const offs = labelOffsets(pattern.steps);
@@ -79,7 +94,8 @@ function Canvas({ pattern, positions, onMove, stepper }) {
   });
   return (
     <div ref={ref} className="pat-canvas" data-testid="pattern-canvas">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={FIT} nodesConnectable={false} minZoom={0.3}
+      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={FIT} nodesConnectable={false} minZoom={MIN_ZOOM}
+        onNodesChange={(changes) => applyNodeChanges(changes, { onMove, onSelect })}
         onNodeDragStop={(_, n) => onMove(n.id, n.position)} onNodeDrag={(_, n) => onMove(n.id, n.position)} proOptions={{ hideAttribution: true }}>
         <Background variant={BackgroundVariant.Dots} gap={18} />
         <Controls showInteractive={false} />
@@ -113,7 +129,11 @@ export default function PatternDiagram({ pattern, resetSignal = 0 }) {
       <ReactFlowProvider>
         <Canvas pattern={pattern} positions={positions} onMove={onMove} stepper={stepper} />
       </ReactFlowProvider>
-      <p className="keys">Drag any box. Dashed arrows: the sink held nothing, or was not read back. Moved: {Object.keys(positions).filter((k) => positions[k].x !== initial[k].x || positions[k].y !== initial[k].y).length} box(es).</p>
+      <details className="pat-steps" data-testid="pattern-steps">
+        <summary>The steps as text</summary>
+        <ol>{pattern.steps.map((s, i) => <li key={i}>{s.label}</li>)}</ol>
+      </details>
+      <p className="keys">Drag any box, or focus it with Tab, press Enter and move it with the arrow keys. Dashed arrows: the sink held nothing, or was not read back. Moved: {Object.keys(positions).filter((k) => positions[k].x !== initial[k].x || positions[k].y !== initial[k].y).length} box(es).</p>
     </section>
   );
 }

@@ -27,3 +27,5 @@
 .pat-node--sink { border-color: var(--th-ok); background: var(--th-bg-card); }
 .pat-node--unverified { border-color: var(--th-status-warning); border-style: dashed; background: var(--th-bg-inset); }
 .pat-edge--none path { stroke-dasharray: 6 5; }
+/* A box selected for keyboard moving (Enter on a focused box) shows it; the arrow keys then move it. */
+.pat-canvas .react-flow__node.selected .pat-node, .pat-canvas .react-flow__node:focus-visible .pat-node { outline: 3px solid var(--th-status-info); outline-offset: 2px; }

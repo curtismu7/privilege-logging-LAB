@@ -42,8 +42,8 @@
 :root {
   --json-bg: var(--surface);
   --json-key: var(--status-info);
-  --json-string: var(--status-ok);
+  --json-string: var(--text-body); /* not --status-ok: green means "met" and the AGENT badge elsewhere on the page */
   --json-number: var(--status-warn);
-  --json-bool: var(--danger-text);
+  --json-bool: var(--text); /* bold, neutral: red read as "denied" even for true */
   --json-null: var(--muted);
 }

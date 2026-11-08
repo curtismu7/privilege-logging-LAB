@@ -23,17 +23,18 @@
   {
    "id": "console",
    "name": "Console Activity Log and Agent Insights",
-   "summary": "Local-proxy rows lack tool, decision and agent. Agent Insights shows AI Guard verdicts for LLM routes. Not re-checked for the cases here."
+   "summary": "Earlier observations: local-proxy rows lack tool, decision and agent; Agent Insights shows AI Guard verdicts for LLM routes. Not read for any case here, so UNVERIFIED.",
+   "unverified": true
   },
   {
    "id": "elasticsearch",
    "name": "Elasticsearch ping-siem-events",
-   "summary": "Console REST API changes only (1,400 events). Zero events for any case."
+   "summary": "Console REST API changes only (1,400 events). Zero events in every case it was read for (16 of 17; not read for llm-injection)."
   },
   {
    "id": "opensearch",
    "name": "OpenSearch gateway-events",
-   "summary": "Shipper sends LLM, AI Guard and A2A events only. Newest event 2026-10-26."
+   "summary": "Shipper sends LLM, AI Guard and A2A events only. Newest event 2026-10-26. Read for 3 cases only (mcp-list-guard-blocked, llm-allowed, llm-injection); not read for the A2A case or llm-model-denied."
   }
  ],
  "cases": [
@@ -63,7 +64,7 @@
       "incoming request: POST /mcp ... payload: {\"method\":\"tools/call\",\"params\":{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Dallas\"}}}",
       "Received HTTP request {\"User\":\"<user-uuid>\",\"Device\":\"<user-uuid>\",\"Tenant\":\"<tenant-uuid>\",\"Method\":\"POST\",\"Path\":\"/mcp\"}"
      ],
-     "note": "User and tool are logged. The decision is implied by the app-level permission line; no per-tool allow line. Email is blank. Arguments and the tool result are logged in full."
+     "note": "User and tool are logged. The decision is implied by the app-level permission line; no per-tool allow line. The arguments appear in the payload line; no line shows the tool result."
     },
     {
      "source": "elasticsearch",
@@ -79,7 +80,7 @@
    },
    "scoreNotes": {
     "agent": "Only the OAuth client id, which names the client not an agent.",
-    "decision": "Inferred from the app-level permission line and the granted-tool list in the X-Procyon-Mcp-Cap header."
+    "decision": "Inferred from the app-level permission line; no per-tool allow line is logged."
    }
   },
   {
@@ -161,7 +162,7 @@
     "decision": "met"
    },
    "scoreNotes": {
-    "agent": "agent=true only; the key name is on the previous line.",
+    "agent": "The denial line says agent=true only; the key name is on the previous line. The assessment judged the denial record on its own (the scorer, reading both sample lines, gives met).",
     "tool": "The denied tool is not named."
    }
   },
@@ -231,11 +232,13 @@
    "score": {
     "user": "met",
     "agent": "partial",
-    "tool": "partial",
+    "tool": "na",
     "decision": "partial"
    },
    "scoreNotes": {
-    "tool": "Removed tools are named; allowed tools are not.",
+    "user": "The recorded level rests on log lines not kept in this sample; the scorer gives missing on the sample lines.",
+    "agent": "The recorded level rests on log lines not kept in this sample; the scorer gives missing on the sample lines.",
+    "tool": "A tools/list call calls no tool (n/a). The log names the removed tools; the kept tools are not listed.",
     "decision": "Removal is the decision; there is no explicit line."
    }
   },
@@ -274,12 +277,11 @@
    "score": {
     "user": "met",
     "agent": "met",
-    "tool": "missing",
-    "decision": "met"
+    "tool": "na",
+    "decision": "partial"
    },
    "scoreNotes": {
-    "tool": "The blocked list names no tool.",
-    "decision": "Guardrail block, not a policy decision."
+    "decision": "Guardrail verdict, no authorization decision line."
    }
   },
   {
@@ -302,8 +304,7 @@
     {
      "source": "gateway-log",
      "lines": [
-      "MCP call detected for method tools with target: get_weather",
-      "(no guardrail line)"
+      "MCP call detected for method tools with target: get_weather"
      ],
      "note": "The call is logged like any allowed call. No guardrail event for request arguments."
     },
@@ -320,7 +321,9 @@
     "decision": "partial"
    },
    "scoreNotes": {
-    "decision": "Nothing says the argument was screened."
+    "user": "The recorded level rests on log lines not kept in this sample; the scorer gives missing on the sample lines.",
+    "agent": "The recorded level rests on log lines not kept in this sample; the scorer gives missing on the sample lines.",
+    "decision": "Nothing says the argument was screened. The recorded level rests on log lines not kept in this sample; the scorer gives missing on the sample lines."
    }
   },
   {
@@ -461,10 +464,12 @@
    "score": {
     "user": "met",
     "agent": "met",
-    "tool": "missing",
+    "tool": "na",
     "decision": "missing"
    },
-   "scoreNotes": {}
+   "scoreNotes": {
+    "decision": "The assessment called it missing; the sample keeps an app-level capabilities line, which the scorer reads as partial (as for mcp-allowed-key)."
+   }
   },
   {
    "id": "aggregate-none",
@@ -494,7 +499,7 @@
    "score": {
     "user": "missing",
     "agent": "missing",
-    "tool": "missing",
+    "tool": "na",
     "decision": "missing"
    },
    "scoreNotes": {}
@@ -534,7 +539,9 @@
     "tool": "na",
     "decision": "partial"
    },
-   "scoreNotes": {}
+   "scoreNotes": {
+    "agent": "The recorded level rests on log lines not kept in this sample; the scorer gives missing on the sample lines."
+   }
   },
   {
    "id": "llm-allowed",
@@ -671,9 +678,11 @@
     "user": "na",
     "agent": "na",
     "tool": "na",
-    "decision": "partial"
+    "decision": "missing"
    },
-   "scoreNotes": {}
+   "scoreNotes": {
+    "decision": "The warning says the intent check could not run; it records no allow or deny verdict."
+   }
   }
  ]
 }

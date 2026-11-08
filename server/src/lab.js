@@ -91,10 +91,11 @@ export function mockRun(c, capture, { rand = randomBytes } = {}) {
   };
 }
 
-// The inferred flags: a field is "inferred" when every line that supports it was matched by the time window, not by the marker.
-function inferredFlags(r, logged) {
+// The inferred flags: a field is "inferred" when every line that supports its score was matched by the time window, not by the marker.
+export function inferredFlags(r, logged) {
   const methods = logged.flatMap((l) => l.methods || l.lines.map(() => 'recorded'));
-  return Object.fromEntries(FIELDS.map((f) => [f, r.evidence[f].length > 0 && r.evidence[f].every((e) => methods[e.line] === 'window')]));
+  // Only the evidence at the field's winning level counts: a weaker marker line does not make a window-only "met" exact.
+  return Object.fromEntries(FIELDS.map((f) => { const best = r.evidence[f].filter((e) => e.level === r.score[f]); return [f, best.length > 0 && best.every((e) => methods[e.line] === 'window')]; }));
 }
 
 // MOCK, phase 1: "send". Nothing is sent; the recorded transaction is only looked up. The result carries no log lines yet.
@@ -111,7 +112,7 @@ export function mockFetch(run, c, capture) {
   return {
     ...run, logged: full.logged.map((l) => ({ ...l, methods: l.lines.map(() => 'recorded') })), marks: full.marks, score: full.score, scoreNotes: full.scoreNotes,
     recomputed: full.recomputed, scored: true, needsPaste: false,
-    retrieval: { state: 'found', phase: 'done', simulated: true, attempt: 1, method: 'recorded', detail: 'Recorded sample lines from the 2026-11-07 measurement.' },
+    retrieval: { state: 'found', phase: 'done', simulated: true, attempt: 1, method: 'recorded', detail: `Recorded sample lines from the ${capture.capturedOn} measurement.` },
   };
 }
 
@@ -189,7 +190,8 @@ export async function fetchAttempt(run, c, { client, cfg, now = Date.now, limits
   const logged = run.logged.filter((l) => l.source === 'response');
   let method = null; let markerLines = 0; let windowLines = 0; let ignored = 0;
   for (const r of results) {
-    const m = matchEntry({ lines: r.lines, marker: run.marker, t0: sentAt, t1: receivedAt, app, rejected: run.group === 'Rejected', windowAllowed, since });
+    // A console action looks for entries from the chosen time up to NOW (each attempt and each Retry), not up to the click on Look.
+    const m = matchEntry({ lines: r.lines, marker: run.marker, t0: sentAt, t1: since != null ? now() : receivedAt, app, rejected: run.group === 'Rejected', windowAllowed, since });
     markerLines += m.markerLines; windowLines += m.windowLines; ignored += m.ignored;
     if (m.lines.length) {
       logged.push(withKinds({ source: r.src.id, lines: m.lines.map((x) => x.text), methods: m.lines.map((x) => x.method), kinds: m.lines.map((x) => x.kind || null), indices: m.lines.map((x) => x.index || null), note: matchNote(m, r, run), origin: originOf(r.src, cfg) }));
@@ -265,5 +267,5 @@ export function attachPasted(run, c, pastedLines) {
   const ctx = { na: naFields(c) };
   const logged = [...run.logged.filter((l) => l.source !== 'pasted'), withKinds({ source: 'pasted', lines: pastedLines.slice(0, 500), kinds: pastedLines.slice(0, 500).map((t) => kindOf({ text: t })), note: 'Lines you pasted.' })];
   const r = scoreLines(allLines(logged), ctx);
-  return { ...run, logged, marks: marksFor(logged, ctx), score: r.score, scoreNotes: noteFrom(r), scored: true, needsPaste: false };
+  return { ...run, logged, marks: marksFor(logged, ctx), score: r.score, scoreNotes: noteFrom(r), scoreInferred: inferredFlags(r, logged), scored: true, needsPaste: false };
 }

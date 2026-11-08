@@ -65,7 +65,9 @@ export function parseLogLine(line) {
       const obj = {};
       for (const k of ORDER) { const p = pairs.find(([key]) => key === k); if (p) obj[k] = p[1]; }
       if (!logrus && free.length) obj.msg = free.join(' ');
-      for (const [k, v] of pairs) if (!(k in obj)) obj[k] = v;
+      // Own-key check and defineProperty: a field named like an Object.prototype member (constructor, toString, __proto__) is a
+      // real field and must show; `k in obj` would skip it and a plain `obj.__proto__ = v` would set the prototype instead.
+      for (const [k, v] of pairs) if (!Object.hasOwn(obj, k)) Object.defineProperty(obj, k, { value: v, enumerable: true, writable: true, configurable: true });
       return { kind: logrus ? 'logrus' : 'logfmt', value: obj };
     }
   }

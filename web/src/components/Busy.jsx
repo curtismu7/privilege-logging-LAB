@@ -1,6 +1,7 @@
 // The progress and failure states of one case's run. Never a blank wait: a status line always says what is happening.
 //   Sending...  ->  Fetching the log entry...  (with attempt and elapsed time while it retries)
 //   failures are explicit: "Log source not reachable", "No entry found within N s", or the error, each with a Retry.
+//   A failed send ("error") has no Retry: that would re-send. A failed log fetch (fetchFailed) does: Retry only fetches again.
 export function busyText(b, mode) {
   if (b.phase === "sending") return mode === "real" ? "Sending..." : "Sending (replaying the recorded call)...";
   if (b.phase === "fetching") {
@@ -28,7 +29,7 @@ export default function Busy({ id, b, mode, onRetry, canRetry = true }) {
   return (
     <div className="busy busy--fail" role="alert" data-testid={`busy-${id}`} data-phase={b.phase}>
       <span><b>{b.phase === "unreachable" ? "Log source not reachable." : b.phase === "timeout" ? "No entry found." : "Failed."}</b> {busyText(b, mode)}</span>
-      {canRetry && b.phase !== "error" && <button type="button" onClick={() => onRetry(id)} data-testid={`retry-${id}`}>Retry</button>}
+      {canRetry && (b.phase !== "error" || b.fetchFailed) && <button type="button" onClick={() => onRetry(id)} data-testid={`retry-${id}`}>Retry</button>}
       {b.phase === "timeout" && <span className="muted"> You can also paste the gateway log lines on the Trace page.</span>}
     </div>
   );

@@ -28,6 +28,23 @@ test('the scorer reproduces the recorded score for every case except the five do
   assert.deepEqual(found, DOCUMENTED_DIFFERENCES);
 });
 
+test('every documented difference is disclosed in that field\'s score note, so the Scorecard and the Markdown export carry it', () => {
+  for (const [id, diff] of Object.entries(DOCUMENTED_DIFFERENCES)) {
+    const c = capture.cases.find((x) => x.id === id);
+    for (const f of Object.keys(diff)) assert.match(c.scoreNotes[f] || '', /scorer/, `${id}.${f} has no note saying the scorer differs`);
+  }
+});
+
+test('the capture stores only log lines in lines: no annotation such as "(no ... line)" posing as a recorded line', () => {
+  for (const c of capture.cases) for (const l of c.logged) for (const t of l.lines) assert.ok(!/^\(.*\)$/.test(t.trim()), `${c.id}/${l.source}: ${t}`);
+});
+
+test('every tools/list case scores tool as n/a: a list call calls no tool', () => {
+  const lists = capture.cases.filter((c) => c.request.method === 'tools/list');
+  assert.ok(lists.length >= 5);
+  for (const c of lists) assert.equal(c.score.tool, 'na', c.id);
+});
+
 test('not-applicable fields come only from the caller, never from lines', () => {
   const r = scoreLines(['MCP call detected for method tools with target: get_weather'], { na: ['tool'] });
   assert.equal(r.score.tool, 'na');
@@ -77,11 +94,55 @@ test('agent: a named key is met, an OAuth client id or a bare agent=true is part
   assert.ok(!looksLikeOAuthClient('audit-test'));
 });
 
-test('decision: an explicit denial or block is met; an app-level permission line is only partial; an auth refusal is partial', () => {
+test('decision: an explicit denial is met; an app-level permission line is only partial; an auth refusal is partial', () => {
   assert.equal(scoreLines(['[mcpgw] policy denied u1 access to demo-mcp-app (agent=true): Access Denied for ']).score.decision, 'met');
   assert.equal(scoreLines(['Principal {User u1} has permission for {Application demo-mcp-app}']).score.decision, 'partial');
   assert.equal(scoreLines(['[mcpgw] auth rejected: reason=token_not_found app=a method=POST']).score.decision, 'partial');
   assert.equal(scoreLines(['MCP call detected for method tools with target: get_weather']).score.decision, 'missing');
+});
+
+// One pattern per line, so each rule is pinned on its own.
+test('decision rules, one at a time', () => {
+  const d = (line) => scoreLines([line]).score.decision;
+  assert.equal(d('[mcpgw] policy denied u1 access to demo-mcp-app'), 'met', 'policy denied alone');
+  assert.equal(d('[mcpgw] Access Denied for x'), 'met', 'Access Denied on a gateway line');
+  assert.equal(d('level=warning msg="Access Denied for something unrelated to authz"'), 'partial', 'Access Denied off a gateway line is not a policy verdict');
+  assert.equal(d('aiguard: blocked mcp response client=k category=malicious_content'), 'partial', 'a guardrail block is not an authorization decision');
+  assert.equal(d('{"Event":"mcp_response_blocked"}'), 'partial', 'a block event is not an authorization decision');
+  assert.equal(d('{"Event":"request_rejected"}'), 'partial', 'a rejected event is not an authorization decision');
+  assert.equal(d('{"Event":"policy_denied"}'), 'met', 'a denied event is a verdict');
+  assert.equal(d('{"Event":"tool_forbidden"}'), 'met', 'a forbidden event is a verdict');
+  assert.equal(d('{"Event":"tool_called"}'), 'missing', 'an ordinary event is no decision');
+  assert.equal(d('[mcpgw] aiintent: configuration <id> is not usable, intent signals stay unavailable'), 'missing', 'an intent-unavailable warning carries no verdict');
+  assert.equal(d('[mcpgw] aiintent: verdict ok'), 'missing');
+  for (const v of ['allow', 'deny', 'permit', 'forbid', 'blocked', 'hitl', 'approval_required', 'held']) assert.equal(d(`decision=${v}`), 'met', `decision=${v}`);
+  assert.equal(d('decision=pending'), 'partial');
+});
+
+test('user, agent and empty-value rules, one at a time', () => {
+  assert.equal(scoreLines(['sub=u1']).score.user, 'met', 'the sub key names the user');
+  assert.equal(scoreLines(['user=undefined']).score.user, 'missing', '"undefined" is not a user');
+  assert.equal(scoreLines(['client=my-oauth-app']).score.agent, 'partial', 'a client named oauth is the OAuth client');
+  assert.ok(looksLikeOAuthClient('my-oauth-app') && !looksLikeOAuthClient('my-web-app'));
+  const named = scoreLines(['Access token found for user: 5f1c, client: my-web-app']).evidence.agent[0];
+  assert.equal(named.level, 'met');
+  assert.match(named.why, /cannot prove the client is an agent/, 'the reason does not overclaim that a bare client name is an agent');
+});
+
+test('bounds, one at a time: the first MAX_LINES lines are kept, JSON deeper than 5 levels and past the node budget is not read', () => {
+  const lines = [...Array.from({ length: MAX_LINES }, () => 'x'), 'MCP call detected for method tools with target: t'];
+  assert.equal(scoreLines(lines).score.tool, 'missing', 'the line after the cap is not read');
+  assert.equal(scoreLines(lines.slice(1)).score.tool, 'met', 'the last line within the cap is read');
+  const nest = (depth) => { let o = { user: 'u1' }; for (let i = 0; i < depth; i += 1) o = { a: o }; return JSON.stringify(o); };
+  assert.equal(scoreLines([nest(5)]).score.user, 'met', 'depth 5 is read');
+  assert.equal(scoreLines([nest(6)]).score.user, 'missing', 'depth 6 is not read');
+  // z is pushed first, so the walk reaches it last: 10 x 50 nodes in front of it use up the 400-node budget (the line stays under MAX_LINE).
+  const wide = (n) => JSON.stringify({ z: { user: 'u1' }, a: Array.from({ length: n }, () => Array.from({ length: 50 }, () => ({}))) });
+  assert.ok(wide(10).length < MAX_LINE);
+  assert.equal(scoreLines([wide(10)]).score.user, 'missing', 'the node budget stops the walk');
+  assert.equal(scoreLines([wide(2)]).score.user, 'met', 'under the budget the record is read');
+  const pad = 'x'.repeat(MAX_LINE - 'MCP call detected for method tools with target: t'.length);
+  assert.equal(scoreLines([`${pad}MCP call detected for method tools with target: t`]).score.tool, 'met', 'a line exactly at the cap is read in full');
 });
 
 test('logrus text lines are read: key=value pairs, quoted msg, and the markers inside a quoted msg', () => {
@@ -97,7 +158,7 @@ test('logrus text lines are read: key=value pairs, quoted msg, and the markers i
 
 test('JSON records are read, with or without a text prefix, and a tools/call payload names the tool', () => {
   const rec = '{"Event":"mcp_response_blocked","Client":"audit-test","User":"u-1","Category":"x"}';
-  assert.deepEqual(Object.values(scoreLines([rec]).score), ['met', 'met', 'missing', 'met']);
+  assert.deepEqual(Object.values(scoreLines([rec]).score), ['met', 'met', 'missing', 'partial']); // a guardrail block event is not an authorization decision
   assert.equal(scoreLines([`Received HTTP request ${rec}`]).score.user, 'met');
   const payload = 'incoming request: POST /mcp ... payload: {"method":"tools/call","params":{"name":"get_weather","arguments":{}}}';
   assert.equal(scoreLines([payload]).score.tool, 'met');

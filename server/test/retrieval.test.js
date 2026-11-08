@@ -2,6 +2,7 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { allowedHosts, installNetguard } from '../src/netguard.js';
 import { createRealClient, RealError } from '../src/realClient.js';
+import { searchWindow } from '../src/searchClient.js';
 import { KEY, NOENV, fakeGateway, fakeK8s, gatewayLog, get, k8sEnv, post, recorder, runAndFetch, withServer } from './helpers.js';
 
 let guard;
@@ -89,13 +90,13 @@ test('a Rejected (401) call is matched by the time window and the app path only,
       const { final } = await runAndFetch(url, 'no-credential');
       assert.equal(final.outcome.http, 401);
       assert.equal(final.retrieval.state, 'found'); assert.equal(final.retrieval.method, 'window');
-      assert.ok(Date.now() - t0 < 240, 'no grace wait: a rejected call never logs the payload');
+      assert.ok(Date.now() - t0 < 1900, `no grace wait: a rejected call never logs the payload (${Date.now() - t0} ms, grace is 2000 ms)`);
       const sink = final.logged.find((l) => l.source === 'k8s-pod');
       assert.equal(sink.lines.length, 1); assert.match(sink.lines[0], /auth rejected.*demo-mcp-app/);
       assert.deepEqual(sink.methods, ['window']);
       assert.equal(final.scoreInferred.decision, true);
       assert.equal(final.score.user, 'missing');
-    }, opts(gw, k8s));
+    }, { ...opts(gw, k8s), fallbackMs: 2000, maxMs: 6000 }); // a wide grace period, so the "no grace wait" bound has real slack on a loaded machine
   } finally { await gw.close(); await k8s.close(); }
 });
 
@@ -129,6 +130,9 @@ test('nothing within the limit: timeout with the reason; Retry (restart) starts 
       const { final } = await runAndFetch(url, 'mcp-allowed-key');
       assert.equal(final.retrieval.state, 'timeout'); assert.match(final.retrieval.detail, /No entry found within 1 s/);
       assert.equal(final.scored, false);
+      const fresh = await (await post(url, '/api/fetch-log', { caseId: 'mcp-allowed-key', restart: true })).json();
+      assert.equal(fresh.retrieval.state, 'pending', 'Retry restarts the clock: still absent is pending again, not an instant timeout');
+      assert.ok(fresh.retrieval.elapsedMs < 700, `${fresh.retrieval.elapsedMs} ms`);
       ready = true;
       const retry = await (await post(url, '/api/fetch-log', { caseId: 'mcp-allowed-key', restart: true })).json();
       assert.equal(retry.retrieval.attempt, 1, 'restart resets the attempt count');
@@ -156,7 +160,6 @@ test('source unreachable: a 500, a 404, a refused connection and a redirect are 
         assert.equal(final.scored, false); assert.equal(final.score, null);
         noKey(final);
       }, { env: k8sEnv(gw, k8s), realTimeoutMs: 250 });
-      await k8s.close();
     }
     await withServer(async (url) => {
       await post(url, '/api/confirm', { gateway: new URL(gw.base).origin });
@@ -164,7 +167,7 @@ test('source unreachable: a 500, a 404, a refused connection and a redirect are 
       assert.equal(final.retrieval.state, 'unreachable'); assert.match(final.retrieval.detail, /refused|connect/i);
     }, { env: k8sEnv(gw, { base: downBase }) });
     assert.deepEqual(target.requests, []);
-  } finally { await gw.close(); await target.close(); }
+  } finally { for (const [k8s] of cases) await k8s.close(); await gw.close(); await target.close(); } // every proxy, even after a failed assertion
 });
 
 test('a hostile oversized log response is bounded: the read stops at the cap, the answer stays small, and the page gets no 2 MB line', async () => {
@@ -238,7 +241,7 @@ test('Mock makes no k8s request even when a log source is configured, and Real r
 test('console action cases send nothing: "Look for entries since" reads the source for the span and shows every line, labelled window', async () => {
   const gw = await fakeGateway();
   const base = Date.now();
-  const k8s = await fakeK8s({ logText: () => [`${iso(base - 3 * 3600_000)} too old`, `${iso(base - 60_000)} time="x" level=info msg="agent key created id=k-1"`, `${iso(base - 30_000)} time="x" level=info msg="agent key revoked id=k-1"`].join('\n') });
+  const k8s = await fakeK8s({ logText: () => [`${iso(base - 3 * 3600_000)} too old`, `${iso(base - 10 * 60_000)} time="x" level=info msg="before the chosen time"`, `${iso(base - 60_000)} time="x" level=info msg="agent key created id=k-1"`, `${iso(base - 30_000)} time="x" level=info msg="agent key revoked id=k-1"`].join('\n') });
   try {
     await withServer(async (url) => {
       await confirm(url, gw);
@@ -249,9 +252,86 @@ test('console action cases send nothing: "Look for entries since" reads the sour
       assert.equal(final.retrieval.state, 'found'); assert.equal(final.retrieval.method, 'window');
       const sink = final.logged.find((l) => l.source === 'k8s-pod');
       assert.equal(sink.lines.length, 2); assert.ok(sink.methods.every((m) => m === 'window'));
-      assert.ok(Number(new URL(k8s.requests[0].url, 'http://x').searchParams.get('sinceSeconds')) >= 300);
+      const sinceSeconds = Number(new URL(k8s.requests[0].url, 'http://x').searchParams.get('sinceSeconds'));
+      assert.ok(sinceSeconds >= 300 && sinceSeconds <= 400, `the chosen since (5 min) is used, not a 15 min default: ${sinceSeconds}`);
       assert.equal((await post(url, '/api/run', { caseId: 'reg-key-created', since: 'yesterday' })).status, 400);
       assert.equal((await post(url, '/api/run', { caseId: 'reg-key-created', since: iso(base - 3 * 86_400_000) })).status, 400);
     }, opts(gw, k8s));
   } finally { await gw.close(); await k8s.close(); }
+});
+
+test('console action: an entry written AFTER the Look click is found by Retry (the window runs to now, not to the click)', async () => {
+  const gw = await fakeGateway(); let ready = false; let stamp = 0;
+  const k8s = await fakeK8s({ logText: () => (ready ? `${iso(stamp)} time="x" level=info msg="agent key created id=k-2"` : '') });
+  try {
+    await withServer(async (url) => {
+      await confirm(url, gw);
+      const { run, final } = await runAndFetch(url, 'reg-key-created', { body: { since: iso(Date.now() - 60_000) } });
+      assert.equal(final.retrieval.state, 'timeout');
+      stamp = Date.parse(run.ranAt) + 300; ready = true; // the owner performs the console action after clicking Look
+      let r = await (await post(url, '/api/fetch-log', { caseId: 'reg-key-created', restart: true })).json();
+      for (let i = 0; i < 40 && r.retrieval.state === 'pending'; i += 1) { await new Promise((x) => setTimeout(x, 25)); r = await (await post(url, '/api/fetch-log', { caseId: 'reg-key-created' })).json(); }
+      assert.equal(r.retrieval.state, 'found', r.retrieval.detail);
+      assert.match(r.logged.find((l) => l.source === 'k8s-pod').lines[0], /key created id=k-2/);
+    }, opts(gw, k8s));
+  } finally { await gw.close(); await k8s.close(); }
+});
+
+test('one source down, one working: the entry is found from the working one and the down one is reported', async () => {
+  const gw = await fakeGateway(); const k8s = await fakeK8s({ logText: () => gatewayLog(gw).join('\n') });
+  const down = await fakeK8s(); const downBase = down.base; await down.close();
+  try {
+    await withServer(async (url) => {
+      await confirm(url, gw);
+      const { final } = await runAndFetch(url, 'mcp-allowed-key');
+      assert.equal(final.retrieval.state, 'found');
+      assert.deepEqual(final.retrieval.sources.map((x) => [x.id, x.state]), [['k8s-pod', 'ok'], ['search', 'error']]);
+    }, { env: k8sEnv(gw, k8s, { PRIV_LOG_SEARCH_URL: downBase, PRIV_LOG_SEARCH_INDEX: 'gateway-events' }) });
+  } finally { await gw.close(); await k8s.close(); }
+});
+
+test('a late fetch-log never overwrites a newer run, and never brings back a run Reset removed', async () => {
+  const gw = await fakeGateway();
+  const k8s = await fakeK8s({ delayMs: 400, logText: () => '' });
+  try {
+    await withServer(async (url) => {
+      await confirm(url, gw);
+      const first = await (await post(url, '/api/run', { caseId: 'mcp-allowed-key' })).json();
+      const slow = post(url, '/api/fetch-log', { caseId: 'mcp-allowed-key' });
+      await new Promise((x) => setTimeout(x, 100));
+      const second = await (await post(url, '/api/run', { caseId: 'mcp-allowed-key' })).json();
+      assert.notEqual(first.marker, second.marker);
+      const late = await slow;
+      assert.equal(late.status, 200); assert.equal((await late.json()).marker, second.marker, 'the late answer reports the current run');
+      const runs = (await json(await get(url, '/api/runs'))).body.runs;
+      assert.deepEqual(runs.map((r) => r.marker), [second.marker], 'the stored run is still the newer one');
+
+      const slow2 = post(url, '/api/fetch-log', { caseId: 'mcp-allowed-key' });
+      await new Promise((x) => setTimeout(x, 100));
+      await post(url, '/api/reset', {});
+      const late2 = await slow2;
+      assert.equal(late2.status, 409); assert.equal((await late2.json()).error, 'superseded');
+      assert.deepEqual((await json(await get(url, '/api/runs'))).body.runs, [], 'Reset stays reset');
+    }, { ...opts(gw, k8s), maxMs: 5000 });
+  } finally { await gw.close(); await k8s.close(); }
+});
+
+test('search: a busy window keeps the NEWEST events (sorted descending, returned in log order) and says when it was cut', async () => {
+  const events = Array.from({ length: 300 }, (_, i) => ({ '@timestamp': new Date(1_800_000_000_000 + i * 1000).toISOString(), message: `event ${i}` }));
+  const asked = [];
+  const client = { request: async ({ body }) => {
+    const q = JSON.parse(body); asked.push(q);
+    const dir = q.sort[0]['@timestamp'];
+    const sorted = [...events].sort((a, b) => (dir === 'desc' ? -1 : 1) * a['@timestamp'].localeCompare(b['@timestamp']));
+    return { status: 200, headers: {}, text: JSON.stringify({ hits: { hits: sorted.slice(0, q.size).map((e) => ({ _source: e })) } }), truncated: false, ms: 1, redirect: null };
+  } };
+  const trace = { traceId: '0'.repeat(31) + '1', span: () => '0'.repeat(15) + '1' };
+  const r = await searchWindow({ client, searchUrl: 'http://search.example.invalid/', index: 'x', fromMs: 0, toMs: 2_000_000_000_000, trace });
+  assert.equal(asked[0].size, 200);
+  assert.equal(r.lines.length, 200);
+  assert.equal(r.lines.at(-1).text.includes('event 299'), true, 'the newest event is read');
+  assert.ok(r.lines.every((l, i) => i === 0 || l.ts > r.lines[i - 1].ts), 'chronological order for the scorer');
+  assert.equal(r.truncated, true);
+  const few = await searchWindow({ client: { request: async () => ({ status: 200, headers: {}, text: JSON.stringify({ hits: { hits: [{ _source: events[0] }] } }), truncated: false, ms: 1, redirect: null }) }, searchUrl: 'http://search.example.invalid/', index: 'x', fromMs: 0, toMs: 1, trace });
+  assert.equal(few.truncated, false);
 });

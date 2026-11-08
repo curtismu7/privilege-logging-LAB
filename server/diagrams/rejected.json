@@ -57,7 +57,7 @@
     {
       "id": "console",
       "label": "Console Activity Log and Agent Insights",
-      "group": "sink",
+      "group": "unverified",
       "x": 460,
       "y": 330
     },
@@ -148,21 +148,21 @@
     },
     {
       "title": "Console Activity Log and Agent Insights: not read back",
-      "what": "Local-proxy rows lack tool, decision and agent. Agent Insights shows AI Guard verdicts for LLM routes. Not re-checked for the cases here. No reading of this sink was recorded for the Rejected cases (UNVERIFIED).",
+      "what": "Earlier observations: local-proxy rows lack tool, decision and agent; Agent Insights shows AI Guard verdicts for LLM routes. Not read for any case here, so UNVERIFIED. No reading of this sink was recorded for the Rejected cases (UNVERIFIED).",
       "edges": [
         4
       ]
     },
     {
       "title": "Elasticsearch ping-siem-events: nothing",
-      "what": "Nothing was logged here for this flow. Nothing.",
+      "what": "No line was found here for this flow. Console REST API changes only (1,400 events). Zero events in every case it was read for (16 of 17; not read for llm-injection).",
       "edges": [
         5
       ]
     },
     {
       "title": "OpenSearch gateway-events: not read back",
-      "what": "Shipper sends LLM, AI Guard and A2A events only. Newest event 2026-10-26. No reading of this sink was recorded for the Rejected cases (UNVERIFIED).",
+      "what": "Shipper sends LLM, AI Guard and A2A events only. Newest event 2026-10-26. Read for 3 cases only (mcp-list-guard-blocked, llm-allowed, llm-injection); not read for the A2A case or llm-model-denied. No reading of this sink was recorded for the Rejected cases (UNVERIFIED).",
       "edges": [
         6
       ]
