@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { isLoopbackHost, isPrivateAddress } from './safety.js';
 
-export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER', 'PRIV_LOG_CONSOLE_URL', 'PRIV_LOG_CONSOLE_TENANT', 'PRIV_LOG_CONSOLE_CA', 'PRIV_LOG_BRIDGE_ES_URL', 'PRIV_LOG_BRIDGE_ES_APIKEY', 'PRIV_LOG_FED_SIGNING_SEED', 'PRIV_LOG_FED_AUDIENCE'];
+export const SETTING_NAMES = ['PRIV_LOG_GATEWAY_URL', 'PRIV_LOG_AGENT_KEY', 'PRIV_LOG_SEARCH_URL', 'PRIV_LOG_SEARCH_INDEX', 'PRIV_LOG_K8S_PROXY_URL', 'PRIV_LOG_K8S_NAMESPACE', 'PRIV_LOG_K8S_POD', 'PRIV_LOG_K8S_CONTAINER', 'PRIV_LOG_CONSOLE_URL', 'PRIV_LOG_CONSOLE_TENANT', 'PRIV_LOG_CONSOLE_CA', 'PRIV_LOG_BRIDGE_ES_URL', 'PRIV_LOG_BRIDGE_ES_APIKEY', 'PRIV_LOG_FED_SIGNING_SEED', 'PRIV_LOG_FED_AUDIENCE', 'PRIVILEGE_KIBANA_URL'];
 export const DEFAULT_K8S_PROXY = 'http://127.0.0.1:8001';
 export const DEFAULT_K8S_CONTAINER = 'log-tailer';
 // A Kubernetes object name (RFC 1123 subdomain) or a label selector such as app=privilege-gateway,tier=gw.
@@ -131,6 +131,14 @@ export function fedConfig(env = process.env, opts) {
   else if (!audience) problem = 'PRIV_LOG_FED_AUDIENCE is not set (copy the Audience from the Federated Identity in the Privilege console)';
   else if (audience.length > 512 || /[\s\u0000-\u001f]/.test(audience)) problem = 'PRIV_LOG_FED_AUDIENCE must be up to 512 characters with no spaces';
   return { seed, audience, problem };
+}
+
+// Where the page's "Open in Kibana" link points (the viewer's browser opens it; the lab never contacts it). An origin: https, or http
+// on loopback. Default: a local port-forward to Kibana.
+export const DEFAULT_KIBANA_URL = 'http://localhost:5601';
+export function kibanaConfig(env = process.env, opts) {
+  const k = checkUrl(readSettings(env, opts).PRIVILEGE_KIBANA_URL || DEFAULT_KIBANA_URL, { what: 'PRIVILEGE_KIBANA_URL', allowPath: false });
+  return k.error ? { origin: null, problem: k.error } : { origin: k.origin, problem: null };
 }
 
 export const realAvailableFrom = (env = process.env, opts) => realConfig(env, opts).ok;

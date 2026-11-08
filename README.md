@@ -115,6 +115,7 @@ npm run bridge -- --once  # one pass
 | Name | |
 | --- | --- |
 | `PRIV_LOG_BRIDGE_ES_URL` | The Elasticsearch origin (https, or http on loopback). |
+| `PRIVILEGE_KIBANA_URL` | Optional. Where the Privilege tab's **Open in Kibana** link points (an origin: https, or http on loopback; default `http://localhost:5601`). The lab never contacts it. |
 | `PRIV_LOG_BRIDGE_ES_APIKEY` | An Elasticsearch API key that may only write to the target index. **Write-only**: never printed or logged. |
 
 The bridge also needs the console settings above. What it cannot fix: a plain allowed call has no decision record to copy (only calls a policy matched get one).
@@ -126,7 +127,19 @@ Every entry is labelled twice:
 - **Channel** (a badge on each sink): `GATEWAY POD LOG` (read with kubectl, not from Privilege), `PRIVILEGE -> ELASTICSEARCH` (what Privilege itself wrote), or another source (our OpenSearch sidecar, the response header, pasted lines).
 - **Kind**: a **runtime event** is something the gateway did with traffic (a call, a policy decision, a guardrail verdict, an approval hold); a **console event** is an admin change in the Privilege console. Privilege's hosted indices decide it: `policy-decision-log`, `aiguard-log`, `proxy-audit-log`, `agent-approval-log`, `proxy-event-log` are runtime; `audit-log`, `event-log` are console. In a SIEM index a console event has a top-level `Module` and a string `Data`.
 
-The **Privilege -> Elasticsearch** tab shows only Privilege's own entries for a time range, filterable by kind and index. Privilege's logs carry keys in full (an `aiguard-log` `VirtualKeyID`, an agent save's provider `RealKey` in `audit-log`); the lab shows only their first 8 and last 4 characters, and never shows the console's raw base64 answer.
+The **Privilege -> Elasticsearch** tab shows only Privilege's own entries, read through the console:
+
+- **Time**: 15 min, 1 h, 6 h, 24 h, 7 d, 30 d, 90 d, or a custom From/To (at most 90 days back, From before To). Mock counts back from the end of the recording.
+- **Filters**: kind, index, decision (allow, deny, hitl), user, agent key (the client for AI Guard records), tool, app, event (each offered from the values in the range) and free text over the redacted record.
+- **Paging**: the server reads the console 200 records at a time (Size, From) up to 5,000 records per query (the console's search stops at 10,000), says plainly when the cap or the window cut it off, and pages the filtered set 50 at a time (Newer / Older). A read is reused for a minute while you page or filter.
+- **Counts and chart**: runtime vs console, decisions, AI Guard verdicts, and entries over time; click a bar to narrow the range to it. Over a capped read the counts say "capped sample".
+- **Table and JSON**: a compact table (time, index, kind, user, agent, tool, decision) or the colour JSON view. Choose a row's time to see **Related records**: every record within 10 minutes that shares its request id or trace id (`Data.TraceID`, or the trace id in a `Traceparent` header), plus records linked to those by their own ids.
+- **Export**: the page or the whole filtered set (up to the cap) as JSON or CSV, built in the browser from already redacted entries (CSV cells are quoted and formula starts defused).
+- **Open in Kibana**: Discover on the `privilege-logs` data view with the same range and a KQL query from the filters. `PRIVILEGE_KIBANA_URL` sets the origin. The default is `http://localhost:5601` through a port-forward (`kubectl --context <your-context> -n <your-namespace> port-forward svc/kibana-siem 5601:5601`, with your own kube context and namespace). Kibana shows what reached the SIEM index, which may differ from what the console holds.
+
+Mock is labelled "recorded shapes, placeholder values": the five measured decision records plus AI Guard, HTTP and console records in shapes measured 2026-11-08; their times and shared ids are illustrative.
+
+Privilege's logs carry keys in full (an `aiguard-log` `VirtualKeyID`, an agent save's provider `RealKey` in `audit-log`); the lab shows only their first 8 and last 4 characters, and never shows the console's raw base64 answer.
 
 ## How the scorer decides (a pure function, `server/src/scorer.js`)
 

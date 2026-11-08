@@ -1,40 +1,356 @@
 {
  "channel": "Privilege -> Elasticsearch (Privilege hosted), read through the console",
  "recordedOn": "2026-11-07",
- "note": "Recorded sample: the five policy decision records Privilege wrote for our approval and block tests on 2026-11-07, values replaced by placeholders. Only these were measured; the other Privilege indices are read in Real mode.",
- "from": "2026-11-07T22:15:00.000Z",
- "to": "2026-11-07T22:17:00.000Z",
- "truncated": false,
- "entries": [
+ "label": "recorded shapes, placeholder values",
+ "note": "Recorded shapes, placeholder values. The five policy decision records are the ones Privilege wrote for our approval and block tests on 2026-11-07 (measured times, values replaced by placeholders). The AI Guard, HTTP (proxy-audit-log) and console (audit-log) records use the shapes measured on 2026-11-08 with placeholder values; their times, and the request id and trace id they share with the newest approval record (so Related records has something to follow), are illustrative. There is no allow record: a plain allowed call writes no decision record.",
+ "clock": "2026-11-07T22:20:00.000Z",
+ "hits": [
   {
-   "index": "policy-decision-log",
-   "kind": "runtime",
-   "at": "2026-11-07T22:16:54.933Z",
-   "text": "{\"@timestamp\":\"2026-11-07T22:16:54.933Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_approval_required\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\",\"InstructionID\":\"<instruction-id>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:54.933Z",
+    "Data": {
+     "AgentKey": "audit-test",
+     "App": "demo-approval-app",
+     "BaselinePhase": "learning",
+     "Decision": "hitl",
+     "Event": "policy_approval_required",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Principal": "User::\"<user-uuid>\"",
+     "PrincipalKind": "User",
+     "PrincipalResolved": true,
+     "Reason": "This is HITL",
+     "RequestID": "<request-id-1>",
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Target": "SearchIndexTool",
+     "User": "<user-uuid>",
+     "InstructionID": "<instruction-id>"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
   },
   {
-   "index": "policy-decision-log",
-   "kind": "runtime",
-   "at": "2026-11-07T22:16:53.990Z",
-   "text": "{\"@timestamp\":\"2026-11-07T22:16:53.990Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_decision\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:53.990Z",
+    "Data": {
+     "AgentKey": "audit-test",
+     "App": "demo-approval-app",
+     "BaselinePhase": "learning",
+     "Decision": "hitl",
+     "Event": "policy_decision",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Principal": "User::\"<user-uuid>\"",
+     "PrincipalKind": "User",
+     "PrincipalResolved": true,
+     "Reason": "This is HITL",
+     "RequestID": "<request-id-2>",
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Target": "SearchIndexTool",
+     "User": "<user-uuid>"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
   },
   {
-   "index": "policy-decision-log",
-   "kind": "runtime",
-   "at": "2026-11-07T22:16:43.449Z",
-   "text": "{\"@timestamp\":\"2026-11-07T22:16:43.449Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_approval_required\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\",\"InstructionID\":\"<instruction-id>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:43.449Z",
+    "Data": {
+     "AgentKey": "audit-test",
+     "App": "demo-approval-app",
+     "BaselinePhase": "learning",
+     "Decision": "hitl",
+     "Event": "policy_approval_required",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Principal": "User::\"<user-uuid>\"",
+     "PrincipalKind": "User",
+     "PrincipalResolved": true,
+     "Reason": "This is HITL",
+     "RequestID": "<request-id-3>",
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Target": "SearchIndexTool",
+     "User": "<user-uuid>",
+     "InstructionID": "<instruction-id>"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
   },
   {
-   "index": "policy-decision-log",
-   "kind": "runtime",
-   "at": "2026-11-07T22:16:43.137Z",
-   "text": "{\"@timestamp\":\"2026-11-07T22:16:43.137Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"hitl\",\"Event\":\"policy_decision\",\"Flow\":\"mcp\",\"GrantShape\":\"capability\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-demo:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"This is HITL\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"SearchIndexTool\",\"User\":\"<user-uuid>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:43.137Z",
+    "Data": {
+     "AgentKey": "audit-test",
+     "App": "demo-approval-app",
+     "BaselinePhase": "learning",
+     "Decision": "hitl",
+     "Event": "policy_decision",
+     "Flow": "mcp",
+     "GrantShape": "capability",
+     "Method": "tools/call",
+     "PolicyIDs": [
+      "hitl-demo:1"
+     ],
+     "Principal": "User::\"<user-uuid>\"",
+     "PrincipalKind": "User",
+     "PrincipalResolved": true,
+     "Reason": "This is HITL",
+     "RequestID": "<request-id-4>",
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Target": "SearchIndexTool",
+     "User": "<user-uuid>"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
   },
   {
-   "index": "policy-decision-log",
-   "kind": "runtime",
-   "at": "2026-11-07T22:15:52.045Z",
-   "text": "{\"@timestamp\":\"2026-11-07T22:15:52.045Z\",\"Data\":{\"AgentKey\":\"audit-test\",\"App\":\"demo-approval-app\",\"BaselinePhase\":\"learning\",\"Decision\":\"deny\",\"Event\":\"policy_decision\",\"Flow\":\"mcp\",\"GrantShape\":\"transaction\",\"Method\":\"tools/call\",\"PolicyIDs\":[\"hitl-block-generic-api:1\"],\"Principal\":\"User::\\\"<user-uuid>\\\"\",\"PrincipalKind\":\"User\",\"PrincipalResolved\":true,\"Reason\":\"this tool can call any search API endpoint - blocked outright, no approval path\",\"RequestID\":\"<request-id>\",\"SchemaVersion\":1,\"Stage\":\"pre_guard\",\"Target\":\"GenericOpenSearchApiTool\",\"User\":\"<user-uuid>\"},\"Level\":\"INFO\",\"Message\":\"AIPolicyDecision\"}"
+   "_index": "policy-decision-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:15:52.045Z",
+    "Data": {
+     "AgentKey": "audit-test",
+     "App": "demo-approval-app",
+     "BaselinePhase": "learning",
+     "Decision": "deny",
+     "Event": "policy_decision",
+     "Flow": "mcp",
+     "GrantShape": "transaction",
+     "Method": "tools/call",
+     "PolicyIDs": [
+      "hitl-block-generic-api:1"
+     ],
+     "Principal": "User::\"<user-uuid>\"",
+     "PrincipalKind": "User",
+     "PrincipalResolved": true,
+     "Reason": "this tool can call any search API endpoint - blocked outright, no approval path",
+     "RequestID": "<request-id-5>",
+     "SchemaVersion": 1,
+     "Stage": "pre_guard",
+     "Target": "GenericOpenSearchApiTool",
+     "User": "<user-uuid>"
+    },
+    "Level": "INFO",
+    "Message": "AIPolicyDecision"
+   }
+  },
+  {
+   "_index": "aiguard-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:58.120Z",
+    "Message": "AIGuard",
+    "Region": "<region>",
+    "Level": "WARNING",
+    "Data": {
+     "Findings": [
+      {
+       "Score": 0,
+       "Category": "malicious_content",
+       "Detector": "<detector>",
+       "Recommended": "<recommended>",
+       "Severity": "<severity>"
+      }
+     ],
+     "Category": "malicious_content",
+     "User": "<user-uuid>",
+     "KeyType": "<key-type>",
+     "RequestID": "<request-id-1>",
+     "TopScore": 0,
+     "ComplianceMappings": [
+      {
+       "MappingType": "<mapping-type>",
+       "Identifier": "<identifier>",
+       "CatalogVersion": "<catalog-version>",
+       "Framework": "<framework>",
+       "Source": "<source>"
+      }
+     ],
+     "NISTAIRMFIDs": [
+      "<nist-ai-rmf-id>"
+     ],
+     "Direction": "response",
+     "MITREATLASIDs": [
+      "<mitre-atlas-id>"
+     ],
+     "ElapsedMs": 0,
+     "PrincipalKind": "User",
+     "Tenant": "<tenant>",
+     "ComplianceCatalogSecurityVersion": "<catalog-security-version>",
+     "Event": "mcp_response_blocked",
+     "TraceID": "0000000000000000000000000000feed",
+     "Client": "<client>",
+     "ASIIDs": [
+      "<asi-id>"
+     ],
+     "OWASPIDs": [
+      "<owasp-id>"
+     ],
+     "SpanID": "<span-id>"
+    }
+   }
+  },
+  {
+   "_index": "proxy-audit-log",
+   "_source": {
+    "@timestamp": "2026-11-07T22:16:54.410Z",
+    "Message": "Received HTTP request",
+    "Region": "<region>",
+    "Level": "INFO",
+    "Data": {
+     "Path": "/demo-approval-app/mcp",
+     "Tenant": "<tenant>",
+     "User": "<user-uuid>",
+     "Device": "<device>",
+     "Host": "<host>",
+     "Method": "POST",
+     "Headers": {
+      "Accept": [
+       "<accept>"
+      ],
+      "Content-Type": [
+       "<content-type>"
+      ],
+      "Content-Length": [
+       "<content-length>"
+      ],
+      "Mcp-Protocol-Version": [
+       "<mcp-protocol-version>"
+      ],
+      "Traceparent": [
+       "00-0000000000000000000000000000feed-00000000000000a1-01"
+      ],
+      "X-Request-Id": [
+       "<x-request-id>"
+      ],
+      "X-Forwarded-For": [
+       "<x-forwarded-for>"
+      ],
+      "X-Forwarded-Host": [
+       "<x-forwarded-host>"
+      ],
+      "X-Forwarded-Port": [
+       "<x-forwarded-port>"
+      ],
+      "X-Forwarded-Proto": [
+       "<x-forwarded-proto>"
+      ],
+      "X-Forwarded-Scheme": [
+       "<x-forwarded-scheme>"
+      ],
+      "X-Real-Ip": [
+       "<x-real-ip>"
+      ],
+      "X-Scheme": [
+       "<x-scheme>"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "_index": "audit-log",
+   "_source": {
+    "@timestamp": "2026-11-07T21:48:10.000Z",
+    "Status": "<status>",
+    "User": {
+     "WrOwners": {
+      "ObjectRef": null
+     },
+     "Tenant": "<tenant>",
+     "Labels": {},
+     "CTags": {},
+     "id": "<id>",
+     "RdOwners": {
+      "ObjectRef": null
+     },
+     "Namespace": "<namespace>",
+     "Name": "<admin-name>"
+    },
+    "Message": "HTTP PUT Request <console-path>",
+    "Device": {
+     "WrOwners": {
+      "ObjectRef": null
+     },
+     "Tenant": "<tenant>",
+     "Labels": {},
+     "CTags": {},
+     "id": "<id>",
+     "RdOwners": {
+      "ObjectRef": null
+     },
+     "Namespace": "<namespace>",
+     "Name": "<device-name>"
+    },
+    "Region": "<region>",
+    "Data": "<change-summary>",
+    "Resources": null,
+    "Module": "apigw",
+    "Level": "INFO"
+   }
+  },
+  {
+   "_index": "audit-log",
+   "_source": {
+    "@timestamp": "2026-11-04T15:02:00.000Z",
+    "Status": "<status>",
+    "User": {
+     "WrOwners": {
+      "ObjectRef": null
+     },
+     "Tenant": "<tenant>",
+     "Labels": {},
+     "CTags": {},
+     "id": "<id>",
+     "RdOwners": {
+      "ObjectRef": null
+     },
+     "Namespace": "<namespace>",
+     "Name": "<admin-name>"
+    },
+    "Message": "HTTP PUT Request <console-path>",
+    "Device": {
+     "WrOwners": {
+      "ObjectRef": null
+     },
+     "Tenant": "<tenant>",
+     "Labels": {},
+     "CTags": {},
+     "id": "<id>",
+     "RdOwners": {
+      "ObjectRef": null
+     },
+     "Namespace": "<namespace>",
+     "Name": "<device-name>"
+    },
+    "Region": "<region>",
+    "Data": "<change-summary>",
+    "Resources": null,
+    "Module": "apigw",
+    "Level": "INFO"
+   }
   }
  ]
 }

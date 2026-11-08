@@ -137,18 +137,21 @@ test('Mock: each recorded entry carries its sink\'s kind (gateway log = runtime,
 
 test('Privilege -> Elasticsearch page API: Mock is the recorded sample; Real reads the console for the last N minutes, needs the confirm, labels every entry', async () => {
   await withServer(async (url) => {
-    const m = await (await get(url, '/api/privilege-logs?minutes=60')).json();
-    assert.equal(m.source, 'mock'); assert.equal(m.entries.length, 5); assert.ok(m.entries.every((e) => e.index === 'policy-decision-log' && e.kind === 'runtime'));
+    const m = await (await get(url, '/api/privilege-logs?range=90d')).json();
+    assert.equal(m.source, 'mock'); assert.equal(m.entries.length, 9);
+    assert.equal(m.entries.filter((e) => e.index === 'policy-decision-log' && e.kind === 'runtime').length, 5, 'the five measured decision records are kept');
+    assert.deepEqual(m.entries.filter((e) => e.index !== 'policy-decision-log').map((e) => [e.index, e.kind]).sort(), [['aiguard-log', 'runtime'], ['audit-log', 'console'], ['audit-log', 'console'], ['proxy-audit-log', 'runtime']]);
+    assert.equal(m.label, 'recorded shapes, placeholder values');
     assert.ok(!JSON.stringify(m).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/), 'the sample carries placeholders, not ids');
-    assert.equal((await get(url, '/api/privilege-logs?minutes=0')).status, 400);
+    assert.equal((await get(url, '/api/privilege-logs?minutes=60')).status, 400, 'the old minutes parameter is gone');
   });
   const gw = await fakeGateway();
   const cons = await fakeConsole({ records: () => [rec(iso(Date.now() - 60_000), 'demo-mcp-app'), { _index: 'audit-log', '@timestamp': iso(Date.now() - 30_000), Module: 'apigw', Message: 'HTTP PUT Request', Data: 'changed' }, rec(iso(Date.now() - 7_200_000), 'demo-mcp-app')] });
   try {
     await withServer(async (url) => {
-      assert.equal((await get(url, '/api/privilege-logs?minutes=60')).status, 412, 'not before the origins are confirmed');
+      assert.equal((await get(url, '/api/privilege-logs?range=1h')).status, 412, 'not before the origins are confirmed');
       await confirm(url, gw);
-      const r = await (await get(url, '/api/privilege-logs?minutes=60')).json();
+      const r = await (await get(url, '/api/privilege-logs?range=1h')).json();
       assert.equal(r.source, 'real'); assert.equal(r.entries.length, 2, 'only the asked time range');
       assert.deepEqual(r.entries.map((e) => [e.index, e.kind]).sort(), [['audit-log', 'console'], ['policy-decision-log', 'runtime']]);
       assert.match(r.channel, /Privilege -> Elasticsearch/); noKey(r);
@@ -181,7 +184,7 @@ test('Privilege logs carry keys in full (aiguard VirtualKeyID, an agent save\'s 
     await withServer(async (url) => {
       await confirm(url, gw);
       const { final } = await runAndFetch(url, 'mcp-allowed-key');
-      const page = await (await get(url, '/api/privilege-logs?minutes=5')).json();
+      const page = await (await get(url, '/api/privilege-logs?range=15m')).json();
       for (const x of [final, page]) { const t = JSON.stringify(x); assert.ok(!t.includes(VK) && !t.includes(RK), 'a key reached an answer'); assert.ok(!t.includes(Buffer.from(VK).toString('base64').slice(0, 20))); }
       assert.ok(final.logged.find((l) => l.source === 'privilege-hosted').lines.some((l) => l.includes('sk-orion***') && l.includes(VK.slice(-4))), 'masked to prefix and last four');
       assert.ok(final.hops.some((h) => typeof h.response === 'string' ? /not shown here/.test(h.response) : /not shown here/.test(JSON.stringify(h))), 'the raw hop shows the size of the base64 answer, not the answer');
