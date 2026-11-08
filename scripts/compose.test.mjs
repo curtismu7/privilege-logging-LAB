@@ -68,3 +68,7 @@ test('the compose file never sets a key or gateway default, and mounts nothing f
   assert.doesNotMatch(compose, /^\s*volumes:/m);
   assert.doesNotMatch(compose, /docker\.sock|network_mode|privileged/);
 });
+
+test('docker-compose.yml passes a usable SHELF_URL into the container (the shelf button needs it)', () => {
+  assert.match(here('docker-compose.yml'), /^\s*SHELF_URL: \$\{SHELF_URL:-http:\/\/127\.0\.0\.1:4400\}\s*$/m);
+});
