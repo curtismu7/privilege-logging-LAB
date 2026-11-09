@@ -44,3 +44,33 @@ jobs:
       - name: No AI attribution
         if: ${{ !cancelled() }}
         run: bash scripts/check-no-ai-attribution.sh
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start the app (mock, loopback)
+        run: |
+          PORT=7801 nohup npm start -w server > "$RUNNER_TEMP/app.log" 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:7801/api/health > /dev/null && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/app.log"; exit 1
+      - run: npm run e2e
+        env:
+          E2E_SHOTS: ${{ runner.temp }}/e2e-screenshots
+      - name: Screenshots (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: |
+            ${{ runner.temp }}/e2e-screenshots
+            .data/e2e-screenshots
+            e2e-output
+          retention-days: 7
