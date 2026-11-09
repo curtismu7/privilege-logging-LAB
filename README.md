@@ -1,6 +1,7 @@
-# Privilege Logging Lab
+# Privilege Logging LAB
 
-**Tier: Tester**
+Tier: Tester.
+Repo: https://github.com/curtismu7/privilege-logging-LAB
 
 A customer-explanation tool. For each PingOne Privilege (AI gateway) use case it drives a transaction through the gateway and shows **what gets logged**, scored against this customer requirement:
 
@@ -80,6 +81,37 @@ HOST_PORT=7801 docker compose up --build -d
 ```
 
 Open <http://127.0.0.1:7801/>. Health: <http://127.0.0.1:7801/api/health> (`demo-health/1`). Preflight: `npm run doctor`. Reset a running lab: `npm run reset` (or the header Reset, or `POST /api/reset`).
+
+## Run from a clone
+
+Prerequisites: Node 26 or newer. Docker (OrbStack) only for the Docker form. Mock needs no tenant and no credentials.
+
+```
+git clone https://github.com/curtismu7/privilege-logging-LAB.git
+cd privilege-logging-LAB
+npm ci
+npm run build
+npm run doctor
+npm start
+```
+
+Open http://127.0.0.1:7801/. `GET /api/health` answers `demo-health/1`. Or with Docker: `HOST_PORT=7801 docker compose up --build -d` from the same folder.
+
+## What to do if the port is taken
+
+```
+Ports: privilege-logging-LAB listens on 7801 only.
+Docker publishes it on 127.0.0.1:7801 only.
+
+If the port is taken:
+1. Find what is using it:
+   lsof -iTCP:7801 -sTCP:LISTEN -n -P
+2. If it is an old copy of this lab (npm start), stop that process: kill <PID>.
+   If it is this lab's container: docker compose down (from this folder).
+3. If it is something else, stop it. The lab refuses any other port on purpose
+   (one port per app; npm run doctor says so), so free 7801 rather than moving the lab.
+4. Then start again: npm start, or docker compose up -d.
+```
 
 ### Real mode settings
 
