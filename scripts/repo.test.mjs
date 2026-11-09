@@ -15,7 +15,7 @@ test('the files the standalone rules ask for are present', () => {
 });
 
 test('the README declares the tier on its own line', () => {
-  assert.match(read('README.md'), /^\*\*Tier: Tester\*\*/m);
+  assert.match(read('README.md'), /^Tier: Tester\.$/m);
 });
 
 test('the shelf entry is valid and portable: relative composeFile, loopback url, health path, port 7801, no invented catalogId', () => {
