@@ -10,7 +10,7 @@
 .row--between { justify-content: space-between; }
 
 /* App shell (STANDALONE-UI-PATTERNS 1): Core Dark bar in both themes, Ping Red gradient rule, pill nav */
-.shell-bar { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; padding: 0.6rem 1rem; background: var(--box-dark); color: var(--on-box); border-bottom: 3px solid transparent; border-image: var(--accent-gradient) 1; margin: 0 -16px; }
+.shell-bar { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; padding: 0.6rem 1rem; background: var(--box-dark); color: var(--on-box); border-bottom: 3px solid transparent; border-image: var(--accent-gradient) 1; margin: 0 -16px; position: relative; }
 .shell-brand { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 700; letter-spacing: 0.02em; }
 .shell-logo { width: 1.9rem; height: 1.9rem; border-radius: 4px; background: var(--accent-gradient); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; }
 .shell-badge { padding: 0.1rem 0.55rem; border-radius: 999px; background: var(--accent-gradient); color: var(--on-accent); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -216,3 +216,5 @@ button.linkish { background: none; border: 1px solid var(--border); border-radiu
   .req9-meta { grid-column: 1 / -1; }
   .req9-node__k { display: block; }
 }
+
+html { font-size: var(--fs, 16px); }

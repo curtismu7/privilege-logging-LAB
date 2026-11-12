@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import fs from "node:fs";
 import ConfirmGate from "./components/ConfirmGate";
 import DiagramPage from "./components/DiagramPage";
 import RunPage from "./components/RunPage";
@@ -10,7 +11,10 @@ import TracePage from "./components/TracePage";
 import PrivilegePage from "./components/PrivilegePage";
 import Req9Page from "./components/Req9Page";
 import { confirmGateway, fetchLog, getJson, resetWorkspace, runCase, setBearer, setMode } from "./api";
-import { THEMES, applyTheme, savedTheme } from "./theme";
+import { applyTheme, savedTheme } from "./theme";
+import TopMenu, { applyFontSize } from "./top-menu/TopMenu.jsx";
+
+const VERSION = (() => { try { return JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version || null; } catch { return null; } })();
 
 export const TABS = [
   { id: "run", label: "Run" },
@@ -48,6 +52,8 @@ export default function App() {
   const [nav, setNav] = useState(parseHash());
   const [presenter, setPresenter] = useState(false);
   const [theme, setTheme] = useState(savedTheme());
+  const [fontStep, setFontStep] = useState(() => { try { const f = localStorage.getItem("privlog.font"); return ["S", "M", "L"].includes(f) ? f : "M"; } catch { return "M"; } });
+  useEffect(() => { applyFontSize(fontStep); try { localStorage.setItem("privlog.font", fontStep); } catch { /* blocked */ } }, [fontStep]);
   const [notice, setNotice] = useState("");
   const [running, setRunning] = useState(null);
   const [gate, setGate] = useState(null); // { gatewayOrigin, searchOrigin, queue }
@@ -214,24 +220,20 @@ export default function App() {
           {TABS.map((t) => <a key={t.id} href={`#${t.id}`} aria-current={nav.tab === t.id ? "page" : undefined} onClick={(e) => { e.preventDefault(); go(t.id, t.id === "trace" ? selected : null); }} data-testid={`nav-${t.id}`}>{t.label}</a>)}
         </nav>
         <span className="shell-right">
-          {info && (
-            <span className="seg" role="group" aria-label="Data source" data-testid="mode-toggle">
-              <button type="button" aria-pressed={!real} data-testid="mode-mock" onClick={() => switchTo("mock")}>Mock</button>
-              <button type="button" aria-pressed={real} data-testid="mode-real" disabled={!info.realAvailable && !real} aria-describedby={realHint ? "real-hint" : undefined}
-                title={info.realAvailable ? "Send to your configured gateway and read the log back (owner-run)" : info.realHint || "Real is not configured. Mock keeps working."}
-                onClick={() => switchTo("real")}>Real</button>
-            </span>
-          )}
-          {info === null && <button type="button" onClick={loadInfo} data-testid="mode-retry">Retry mode</button>}
-          <button type="button" onClick={refresh} data-testid="refresh" title="Stop any wait for a log entry, free the Run buttons and reload the data. Your runs are kept.">Refresh</button>
-          <button type="button" onClick={reset} data-testid="reset">Reset</button>
-          <button type="button" aria-pressed={presenter} onClick={() => setPresenter((v) => !v)} data-testid="presenter">{presenter ? "Exit presenter (Esc)" : "Presenter (P)"}</button>
-          <label className="shell-theme">Theme
-            <select value={theme} onChange={(e) => setTheme(e.target.value)} data-testid="theme" aria-label="Theme">
-              {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </label>
-          <ShelfLink />
+          <TopMenu
+            mode={{ value: real ? "real" : "mock", onChange: switchTo, realAvailable: info ? info.realAvailable : null, realHint: realHint || undefined }}
+            theme={{ value: theme, onChange: setTheme }}
+            fontSize={{ value: fontStep, onChange: setFontStep }}
+            present={{ active: presenter, onToggle: () => setPresenter((v) => !v), label: "Presenter (P)" }}
+            shelfUrl="https://local.ping-devops.com:8443/"
+            help={{ href: "https://github.com/curtismu7/privilege-logging-LAB#readme" }}
+            version={VERSION}
+            onReset={reset}
+          >
+            {info === null && <button type="button" onClick={loadInfo} data-testid="mode-retry">Retry mode</button>}
+            <button type="button" onClick={refresh} data-testid="refresh" title="Stop any wait for a log entry, free the Run buttons and reload the data. Your runs are kept.">Refresh</button>
+            <ShelfLink />
+          </TopMenu>
         </span>
       </header>
       <main className="page">

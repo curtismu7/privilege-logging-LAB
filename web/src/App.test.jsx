@@ -31,9 +31,9 @@ describe("Mock mode", () => {
     render(<App />);
     expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
     await screen.findByTestId("run-page");
-    expect(screen.getByTestId("mode-mock")).toHaveAttribute("aria-pressed", "true");
-    const real = screen.getByTestId("mode-real");
-    expect(real).toBeDisabled();
+    expect(screen.getByTestId("mode-select")).toHaveValue("mock");
+    const real = screen.getByTestId("mode-select").querySelector('option[value="real"]');
+    expect(real.disabled).toBe(true);
     expect(real.getAttribute("title")).toMatch(/PRIV_LOG_GATEWAY_URL/);
     for (const tab of ["trace", "privilege", "req9", "scorecard", "sinks", "diagram", "talk", "run"]) {
       await user.click(screen.getByTestId(`nav-${tab}`));
@@ -307,7 +307,7 @@ describe("Real mode (against a fake gateway)", () => {
       render(<App />);
       await screen.findByTestId("run-page");
       // default is Real when configured
-      await waitFor(() => expect(screen.getByTestId("mode-real")).toHaveAttribute("aria-pressed", "true"));
+      await waitFor(() => expect(screen.getByTestId("mode-select")).toHaveValue("real"));
       expect(screen.getByTestId("banner")).toHaveAttribute("data-state", "live");
       expect(screen.getByTestId("banner").textContent).toMatch(/REAL \(owner-run\)/);
       expect(screen.getByTestId("note-llm-allowed").textContent).toMatch(/Not runnable in Real/);
@@ -337,13 +337,13 @@ describe("Real mode (against a fake gateway)", () => {
       await waitFor(() => expect(screen.getByTestId("score")).toBeInTheDocument());
       expect(screen.getByTestId("trace-source").textContent).toMatch(/REAL/);
       // switch to Mock and back: data reloads (the Real run disappears from the Run page, then Mock replays)
-      await user.click(screen.getByTestId("mode-mock"));
-      await waitFor(() => expect(screen.getByTestId("mode-mock")).toHaveAttribute("aria-pressed", "true"));
+      await user.selectOptions(screen.getByTestId("mode-select"), "mock");
+      await waitFor(() => expect(screen.getByTestId("mode-select")).toHaveValue("mock"));
       expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions/);
       await user.click(screen.getByTestId("nav-run"));
       await waitFor(() => expect(screen.queryByTestId("open-mcp-allowed-key")).toBeNull());
-      await user.click(screen.getByTestId("mode-real"));
-      await waitFor(() => expect(screen.getByTestId("mode-real")).toHaveAttribute("aria-pressed", "true"));
+      await user.selectOptions(screen.getByTestId("mode-select"), "real");
+      await waitFor(() => expect(screen.getByTestId("mode-select")).toHaveValue("real"));
       expect(screen.getByTestId("run-llm-allowed")).toBeDisabled();
     } finally { await gw.close(); }
   }, 30000);

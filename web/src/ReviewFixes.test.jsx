@@ -75,7 +75,7 @@ describe("Run page accessibility and focus", () => {
     expect(screen.getByRole("button", { name: `Run: ${title}` })).toBe(screen.getByTestId("run-mcp-allowed-key"));
     expect(screen.queryAllByRole("button", { name: "Run" })).toHaveLength(0);
     await waitFor(() => expect(screen.getByTestId("real-hint").textContent).toMatch(/PRIV_LOG_GATEWAY_URL/));
-    expect(screen.getByTestId("mode-real")).toHaveAttribute("aria-describedby", "real-hint");
+    expect(screen.getByTestId("mode-select").querySelector('option[value="real"]').getAttribute("title")).toMatch(/./);
   });
 
   it("after a Run the page stays on Run and focus returns to that Run button, not lost to <body>", async () => {

@@ -124,7 +124,7 @@ describe("Requirement 9 tab (Mock)", () => {
     await screen.findByTestId("req9-page");
     await waitFor(() => expect(rid()).toBe(RELEASE));
     expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
-    expect(screen.getByTestId("mode-toggle")).toBeInTheDocument();
+    expect(screen.getByTestId("mode-select")).toBeInTheDocument();
     expect(screen.getByTestId("nav-req9")).toHaveAttribute("aria-current", "page");
     await user.click(within(screen.getByTestId("req9-list")).getAllByTestId("req9-pick-row")[0]);
     await waitFor(() => expect(window.location.hash).toBe(`#req9/${NEWEST}`));
@@ -162,7 +162,7 @@ describe("Requirement 9 tab (Real, fake console)", () => {
       window.location.hash = "#req9";
       const user = userEvent.setup();
       render(<App />);
-      await waitFor(() => expect(screen.getByTestId("mode-real")).toHaveAttribute("aria-pressed", "true"));
+      await waitFor(() => expect(screen.getByTestId("mode-select")).toHaveValue("real"));
       await screen.findByTestId("confirm-gate");
       expect(reads).toBe(0);
       await user.click(screen.getByTestId("gate-confirm"));
@@ -173,7 +173,7 @@ describe("Requirement 9 tab (Real, fake console)", () => {
       expect(rid()).toBe("realreq02");
       expect(document.body.textContent.includes(KEY)).toBe(false);
       expect(screen.getByTestId("req9-row-plain-allowed")).toHaveAttribute("data-found", "true");
-      await user.click(screen.getByTestId("mode-mock"));
+      await user.selectOptions(screen.getByTestId("mode-select"), "mock");
       await waitFor(() => expect(screen.getByTestId("req9-cov-a-count").textContent).toBe("8 / 8"));
     } finally { await gw.close(); await cons.close(); }
   }, 20000);
