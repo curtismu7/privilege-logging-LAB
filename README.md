@@ -213,3 +213,62 @@ Loopback bind, Host check, same-origin writes, Docker publishes `127.0.0.1:` onl
 `server/` Express API (`capture.js` validator, `scorer.js`, `matcher.js` marker/window matching, `lab.js`, `mcpRunner.js`, `logSources.js` (kubectl proxy pod log, search), `redact.js`, `searchClient.js`, `realClient.js`, `netguard.js`, `config.js`), `server/data/capture.json` the measured fixture (`privilege-logging-capture/1`), `server/diagrams/` flow diagrams, `web/` React + Vite UI, `docs/`, `scripts/`, `content-pack.json` (Learning Hub, `demo-content-pack/1`), `docs/shelf-entry.json`.
 
 Scaffold, safety modules and the diagram stack follow `observability-LAB`; the Mock/Real toggle follows `ai-guard-sidecar-LAB`; no cross-repo imports.
+
+---
+
+## If the Privilege desktop agent shows "unregistered"
+
+The PingOne Privilege **desktop app** (the one serving the local console at
+`https://local.procyon.ai:8643`) stays registered with the Ping cloud through a background
+agent (`ping-helper`). When that agent's device record is deleted or unapproved on the cloud
+side, every Privilege app on this machine loses Real mode: the local console stops serving,
+connections time out, and the desktop app shows the agent as **unregistered**.
+
+### How to tell this is what happened
+
+1. **The desktop app says the agent is unregistered** (banner or the agent status panel), or its
+   diagnostics print `✖ Found N errors` with `Device … not found`.
+2. **The local console is down with it**: `https://local.procyon.ai:8643` does not answer
+   (connection refused / timeout) even though the PingOne Privilege app is running.
+3. **The agent log loops on one error.** Check `/Library/Logs/Procyon/procyon-agent.log`:
+
+   ```
+   Error getting the device: HTTP error: 500 Internal Server Error
+   Body: { "error": "Device <base64-id> not found", "code": 2, ... }
+   ```
+
+   repeated every ~2 seconds. That single line is the tell: the agent is asking the cloud
+   about a device record the cloud no longer has. (A one-off is harmless — it is the endless
+   repetition that means unregistered.)
+
+### Why it happens
+
+- The cloud side **deletes or disables the device record** (an admin action in the console, a
+  tenant sync, or a guard tripping after network churn). The agent cannot re-create it by
+  itself: it re-registers only on an enable/disable cycle, and re-registration **waits for a
+  human to approve the new device** in the console.
+- Network/VPN blips to `privilege.pingone.com` (`lookup … no such host` in the same log) force
+  re-registrations and can churn the device identity, making the window for this bigger.
+
+### How to fix it
+
+1. Open the **PingOne Privilege** desktop app and make sure it is running.
+2. Sign in to the **cloud console**: `https://console.pingone.com/?env=<your-privilege-env-id>`
+   → launch **PingOne Privilege** → open the **Devices** page.
+3. Find this machine's device (`DeviceName: mac-…`, type MAC). It is either:
+   - **pending approval** — click **Approve** (the agent's certificate request is waiting;
+     this is the usual state after a delete), or
+   - **missing entirely** — in the desktop app toggle the agent **off and on** (or quit and
+     reopen the app) so it mints a fresh certificate request, then approve it in the console.
+4. The agent picks up the approval within seconds (watch
+   `/Library/Logs/Procyon/procyon-agent.log` for `Device registered with controller`), and the
+   local console at `local.procyon.ai:8643` starts serving again. Real mode in this app works
+   immediately after — no restart of the app needed.
+
+### If it comes back
+
+The device being deleted repeatedly is a **console-side action** (admin, sync sweep, or a
+server-side guard after repeated network drops). Note the times from
+`grep "Delete request recieved" /Library/Logs/Procyon/procyon-agent*.log` and raise it with
+ whoever administers the Privilege tenant — re-approving treats the symptom; the deletes have
+ to stop for it to stay fixed.
