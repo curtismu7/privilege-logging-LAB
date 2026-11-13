@@ -101,11 +101,13 @@ async function mockProof(browser) {
     const errs = []; p.on('pageerror', (e) => errs.push(String(e))); p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
     p.on('request', (r) => reqs.add(new URL(r.url()).origin));
     await p.goto(BASE); await p.waitForSelector('[data-testid=run-page]');
-    await p.selectOption('[data-testid=theme]', theme);
+    await p.selectOption('[data-testid=theme-select]', theme);
     check(`mock/${theme}: data-theme applied`, await p.evaluate(() => document.documentElement.getAttribute('data-theme')) === theme);
     check(`mock/${theme}: banner says replay and nothing is sent`, /Replay of transactions measured on 2026-11-07; nothing is sent\./.test(await p.textContent('[data-testid=banner]')));
-    check(`mock/${theme}: Mock pressed, Real disabled with a how-to tooltip`, (await p.getAttribute('[data-testid=mode-mock]', 'aria-pressed')) === 'true' && await p.isDisabled('[data-testid=mode-real]') && /PRIV_LOG_GATEWAY_URL/.test(await p.getAttribute('[data-testid=mode-real]', 'title')));
+    // The shared TopMenu: the Real option carries disabled + the how-to title; the mode is the select's value.
+    check(`mock/${theme}: Mock selected, Real disabled with a how-to tooltip`, (await p.inputValue('[data-testid=mode-select]')) === 'mock' && await p.isDisabled('[data-testid=mode-real]') && /PRIV_LOG_GATEWAY_URL/.test(await p.getAttribute('[data-testid=mode-real]', 'title')));
     const info = await (await p.request.get(`${BASE}api/info`)).json();
+    console.log('DBG info', JSON.stringify(info).slice(0, 200)); // TEMP
     check(`mock/${theme}: /api/info source=mock realAvailable=false`, info.source === 'mock' && info.realAvailable === false);
     const real409 = await p.evaluate(async () => (await fetch('/api/mode', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"source":"real"}' })).status);
     check(`mock/${theme}: POST /api/mode real answers 409 when not configured`, real409 === 409);
@@ -218,7 +220,7 @@ async function realProof(browser) {
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(app.url); await p.waitForSelector('[data-testid=run-page]');
-  check('real: default mode is Real when configured, banner is live and says owner-run', (await p.getAttribute('[data-testid=mode-real]', 'aria-pressed')) === 'true' && /REAL \(owner-run\)/.test(await p.textContent('[data-testid=banner]')) && (await p.getAttribute('[data-testid=banner]', 'data-state')) === 'live');
+  check('real: default mode is Real when configured, banner is live and says owner-run', (await p.inputValue('[data-testid=mode-select]')) === 'real' && /REAL \(owner-run\)/.test(await p.textContent('[data-testid=banner]')) && (await p.getAttribute('[data-testid=banner]', 'data-state')) === 'live');
   await shot(p, 'real-run');
   await p.locator('[data-testid=case-mcp-allowed-key]').scrollIntoViewIfNeeded(); await p.evaluate(() => window.scrollBy(0, 300));
   const yRun = await p.evaluate(() => window.scrollY);
@@ -272,13 +274,13 @@ async function realProof(browser) {
   // real-only cases in Real: write-only credential
   await p.fill('[data-testid=bearer-input-keys-revoked]', 'owner-bearer-NOT-REAL-5d2e8f10'); await p.click('[data-testid=bearer-set-keys-revoked]'); await p.waitForSelector('[data-testid=bearer-on-keys-revoked]');
   check('real: the case credential field is write-only (password, cleared, never in the page)', (await p.getAttribute('[data-testid=bearer-input-keys-revoked]', 'type')) === 'password' && (await p.inputValue('[data-testid=bearer-input-keys-revoked]')) === '' && !(await p.content()).includes('owner-bearer-NOT-REAL-5d2e8f10'));
-  await p.click('[data-testid=mode-mock]'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-mock]').getAttribute('aria-pressed') === 'true');
+  await p.selectOption('[data-testid=mode-select]', 'mock'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-select]').value === 'mock');
   const sent = gw.requests.length;
   await p.click('[data-testid=nav-run]'); await p.click('[data-testid=run-no-credential]');
   await p.click('[data-testid=open-no-credential]', { timeout: 15000 });
   await p.waitForSelector('[data-testid=lines-gateway-log]', { timeout: 15000 });
   check('real->mock: switching back replays offline (the fake gateway saw no new request)', gw.requests.length === sent);
-  await p.click('[data-testid=mode-real]'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-real]').getAttribute('aria-pressed') === 'true');
+  await p.selectOption('[data-testid=mode-select]', 'real'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-select]').value === 'real');
   check('mock->real: switching again works without a reload', (await p.textContent('[data-testid=banner]')).includes('REAL (owner-run)'));
   check('real: no page errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
