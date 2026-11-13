@@ -95,6 +95,10 @@ async function jsonProof(p, label, shotPrefix) {
 
 async function mockProof(browser) {
   const reqs = new Set();
+  // A mock-only instance on an ephemeral port: the owner's local copy may be configured for Real, so never test Mock against it.
+  const health = createHealth({ intervalMs: 3_600_000 }); await health.ready;
+  const app = await startHttpServer({ port: 0, host: '127.0.0.1', app: createApp({ health, env: { STANDALONE_ENV: '/nonexistent' }, useSettingsFile: false, mockDelayMs: 600 }) });
+  const BASE = `${app.url}/`;
   for (const theme of ['light', 'dark']) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: theme });
     const p = await ctx.newPage();
@@ -106,9 +110,8 @@ async function mockProof(browser) {
     check(`mock/${theme}: banner says replay and nothing is sent`, /Replay of transactions measured on 2026-11-07; nothing is sent\./.test(await p.textContent('[data-testid=banner]')));
     // The shared TopMenu: the Real option carries disabled + the how-to title; the mode is the select's value.
     check(`mock/${theme}: Mock selected, Real disabled with a how-to tooltip`, (await p.inputValue('[data-testid=mode-select]')) === 'mock' && await p.isDisabled('[data-testid=mode-real]') && /PRIV_LOG_GATEWAY_URL/.test(await p.getAttribute('[data-testid=mode-real]', 'title')));
-    const info = await (await p.request.get(`${BASE}api/info`)).json();
-    console.log('DBG info', JSON.stringify(info).slice(0, 200)); // TEMP
-    check(`mock/${theme}: /api/info source=mock realAvailable=false`, info.source === 'mock' && info.realAvailable === false);
+    const info = await p.evaluate(async () => (await fetch('/api/info')).json()); // the page's fetch carries the workspace id
+      check(`mock/${theme}: /api/info source=mock realAvailable=false`, info.source === 'mock' && info.realAvailable === false);
     const real409 = await p.evaluate(async () => (await fetch('/api/mode', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"source":"real"}' })).status);
     check(`mock/${theme}: POST /api/mode real answers 409 when not configured`, real409 === 409);
     await shot(p, `mock-${theme}-run`);
@@ -130,7 +133,7 @@ async function mockProof(browser) {
     const ro = p.locator('[data-testid=run-keys-revoked]');
     check(`mock/${theme}: a real-only case is listed, disabled, with the tooltip`, (await ro.isDisabled()) && (await ro.getAttribute('title')) === 'No recorded measurement yet. Real mode only.' && /No recorded measurement yet/.test(await p.textContent('[data-testid=mockonly-keys-revoked]')));
     await p.locator('[data-testid=case-keys-revoked]').scrollIntoViewIfNeeded(); await shot(p, `mock-${theme}-realonly`);
-    const rc = await (await p.request.post(`${BASE}api/run`, { headers: { 'content-type': 'application/json', origin: new URL(BASE).origin }, data: { caseId: 'keys-revoked' } })).status();
+    const rc = await p.evaluate(async () => (await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ caseId: 'keys-revoked' }) })).status); // the page's fetch carries the workspace id
     check(`mock/${theme}: POST /api/run for a real-only case answers 409 in Mock`, rc === 409);
     const caseCount = await p.locator('article[data-testid^=case-]').count();
     await p.click('[data-testid=case-tag-filter] [data-testid=filter-tag][data-tag="area:Federated identity"]');
@@ -188,9 +191,9 @@ async function mockProof(browser) {
     await p.click('[data-testid=presenter]');
     check(`mock/${theme}: presenter mode keeps the banner`, await p.isVisible('[data-testid=banner]') && await p.isVisible('[data-testid=presenter-say]'));
     await p.keyboard.press('Escape');
-    // the one 409 is the deliberate "Real is not configured" probe above (the browser logs a refused request as a console error)
+    // the two 409s are the deliberate probes (Real unconfigured, real-only case in Mock); the browser logs refused requests as console errors
     const unexpected = errs.filter((e) => !/status of 409/.test(e));
-    check(`mock/${theme}: no page or console errors (besides the one deliberate 409)`, unexpected.length === 0 && errs.length - unexpected.length === 1, errs.slice(0, 3).join(' | '));
+    check(`mock/${theme}: no page or console errors (besides the deliberate 409s)`, unexpected.length === 0 && errs.length - unexpected.length === 2, errs.slice(0, 3).join(' | '));
     await ctx.close();
   }
   // 375px
@@ -206,6 +209,7 @@ async function mockProof(browser) {
   await ctx.close();
   const outside = [...reqs].filter((o) => o !== new URL(BASE).origin);
   check('mock: the browser only talked to the app origin', outside.length === 0, outside.join(', '));
+  await new Promise((r) => app.server.close(r)); health.stop();
 }
 
 async function realProof(browser) {
