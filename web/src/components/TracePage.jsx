@@ -5,8 +5,10 @@ import { visible } from "../safeText";
 import { Chip, LevelChip } from "./Chips";
 import Busy from "./Busy";
 import LogEntries from "./LogEntries";
+import Json from "./JsonPane.jsx";
 
-const pretty = (v) => visible(JSON.stringify(v, null, 2));
+// Keys that matter in this lab's JSON-RPC calls and answers: which method, which tool, and whether the tool reported an error.
+const RPC_HOT = ["method", "name", "isError"];
 
 function Score({ result }) {
   if (!result.scored) return <p className="muted" data-testid="unscored">{result.realOnly && result.source === "mock" ? "Not measured." : "Not scored: no log entry has been retrieved for this call."} {result.retrieval?.state === "not_configured" ? "No log source is configured. " : ""}Paste the gateway log lines below and they are scored with the same scorer.</p>;
@@ -33,8 +35,8 @@ function Hop({ h }) {
     <details className="hop" data-testid={`hop-${h.n}`}>
       <summary>Hop {h.n}: {h.from} to {h.to} · {visible(h.label)}</summary>
       <p className="muted">traceparent <code>{h.traceparent}</code></p>
-      <h4>Request</h4><pre className="code">{visible(h.request)}</pre>
-      <h4>Response</h4><pre className="code">{visible(h.response)}</pre>
+      <h4>Request</h4><Json value={h.request} label={`Hop ${h.n} request`} testId={`hop-${h.n}-request`} hot={RPC_HOT} />
+      <h4>Response</h4><Json value={h.response} label={`Hop ${h.n} response`} testId={`hop-${h.n}-response`} hot={RPC_HOT} />
     </details>
   );
 }
@@ -86,8 +88,8 @@ export default function TracePage({ cases, runs, sinkInfo, info, caseId, busy = 
                 {result.marker && <div className="kv__row"><dt>Run marker</dt><dd><code data-testid="trace-marker">{result.marker}</code> <span className="muted">in {result.markerWhere}</span></dd></div>}
                 <div className="kv__row"><dt>Source</dt><dd><Chip kind={result.source === "real" ? "info" : "warn"} testId="trace-source">{result.source === "real" ? `REAL, ${result.ranAt}` : `MOCK replay of ${result.recordedOn}`}</Chip></dd></div>
               </dl>
-              {result.request.arguments && <pre className="code" data-testid="trace-args">{pretty(result.request.arguments)}</pre>}
-              {result.wire && <details><summary>{result.source === "real" ? "Call as sent (JSON-RPC)" : "Call Real would send (JSON-RPC, NOT sent now)"}</summary><pre className="code">{pretty(result.wire)}</pre></details>}
+              {result.request.arguments && <Json value={result.request.arguments} label="Tool arguments" testId="trace-args" />}
+              {result.wire && <details><summary>{result.source === "real" ? "Call as sent (JSON-RPC)" : "Call Real would send (JSON-RPC, NOT sent now)"}</summary><Json value={result.wire} label="JSON-RPC call" testId="trace-wire" hot={RPC_HOT} /></details>}
             </section>
             <section className="card" aria-labelledby="t-res">
               <h2 id="t-res" className="card__title">Response</h2>
