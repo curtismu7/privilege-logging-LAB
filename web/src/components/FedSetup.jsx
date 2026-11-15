@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getJson } from "../api";
 import { Chip } from "./Chips";
+import Json from "./JsonPane.jsx";
 
 // The "Valid workload token" case: the lab mints the token itself once it is registered as an issuer in Privilege.
 // Shows the PUBLIC setup values from /api/fed-setup (issuer, subject, JWKS) and the steps; the signing seed is never sent to the page.
@@ -25,7 +26,7 @@ export default function FedSetup({ bearerConfigured }) {
             <li>Subject: allow any subject, and add <strong>required claims</strong> <code>sub</code> = <code>{s.subject}</code> and <code>iss</code> = the issuer above. That way only the lab's tokens match. The console refuses a pinned subject when <code>sub</code> also names the end user.</li>
             <li>Keys: paste this JWKS (no JWKS URI: the gateway cannot reach this lab){s.jwks ? null : " — run step 1 first"}</li>
           </ul>
-          {s.jwks && <pre className="code" data-testid="fed-jwks">{JSON.stringify(s.jwks)}</pre>}
+          {s.jwks && <Json value={s.jwks} label="Public key set (JWKS)" testId="fed-jwks" hot={["kid", "alg"]} />}
           <ul>
             <li>Max token lifetime: {s.tokenLifeSec} s or more (default 3600 is fine). Scopes: <code>mcp</code>. Enabled.</li>
           </ul>

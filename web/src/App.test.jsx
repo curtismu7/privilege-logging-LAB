@@ -5,6 +5,7 @@ import http from "node:http";
 import App from "./App";
 import { segments, fieldsOf } from "./lib/marks";
 import { visible } from "./safeText";
+import { setJsonView } from "./components/JsonPane.jsx";
 import { KEY, startLab } from "./testServer";
 
 let lab;
@@ -75,6 +76,32 @@ describe("Mock mode", () => {
     expect(clipboard.split("\n").filter((l) => l.startsWith("| ")).length).toBe(36);
     expect(screen.getByTestId("copy-status").textContent).toMatch(/Copied/);
   }, 15_000); // 17 replays through the full UI: about 4 s on a loaded machine, so above the 5 s default
+
+  it("Trace: the tool arguments, the JSON-RPC call and every hop go through the shared JSON pane (Form | JSON, important keys stood out)", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    await user.click(screen.getByTestId("run-mcp-allowed-key"));
+    await openTrace(user, "mcp-allowed-key");
+    await screen.findByTestId("trace-args-box", {}, { timeout: 5000 });
+    for (const id of ["trace-args", "trace-wire"]) {
+      const box = screen.getByTestId(`${id}-box`);
+      expect(within(box).getByRole("button", { name: "Form" })).toBeInTheDocument();
+      expect(within(box).getByRole("button", { name: "JSON" })).toBeInTheDocument();
+    }
+    setJsonView("raw");
+    await waitFor(() => expect(screen.getByTestId("trace-args").textContent).toMatch(/^\{\n  "city": "[^"]+"\n\}$/)); // pretty JSON text, the tool's one argument
+    const wire = JSON.parse(screen.getByTestId("trace-wire").textContent);
+    expect(wire.method).toBe("tools/call"); expect(wire.params.name).toBe("get_weather");
+    expect(screen.getByTestId("trace-wire").querySelector(".jtok--hot")).not.toBeNull(); // method / name are this lab's important keys
+    await user.click(within(screen.getByTestId("trace-wire-box")).getByRole("button", { name: "Form" }));
+    expect(screen.getByTestId("trace-wire").textContent).toContain("get_weather");
+    expect(screen.getByTestId("trace-wire").querySelector('[data-hot="true"]')).not.toBeNull();
+    expect(screen.getByTestId("hop-1-request").textContent).toMatch(/^POST \/api\/run /); expect(screen.getByTestId("hop-1-response")).toBeInTheDocument(); // hops: text stays text
+    expect(document.querySelector("pre.code")).toBeNull(); // no hand-rolled pane left on the page
+    setJsonView("raw");
+  });
 
   it("the paste box scores lines with the same scorer and renders hostile text inert", async () => {
     lab = await startLab();
@@ -546,7 +573,8 @@ describe("Real-only (not yet measured) cases", () => {
       cleanup(); render(<App />);
       await screen.findByTestId("fed-ready");
       expect(screen.getByTestId("fed-setup")).not.toHaveAttribute("open");
-      expect(JSON.parse(screen.getByTestId("fed-jwks").textContent).keys[0].alg).toBe("ES256");
+      setJsonView("raw"); // the Form | JSON choice is shared module state: read the JSON text
+      await waitFor(() => expect(JSON.parse(screen.getByTestId("fed-jwks").textContent).keys[0].alg).toBe("ES256"));
       expect(document.body.textContent).not.toContain("11".repeat(32));
       expect(screen.getByTestId("run-fed-valid-token")).not.toBeDisabled();
     } finally { await gw2.close(); }

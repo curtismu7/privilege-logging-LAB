@@ -3,6 +3,10 @@ import { FIELDS, FIELD_LABEL } from "../lib/marks";
 import { copyToClipboard, redactText } from "../lib/clipboard";
 import { STR_CAP, STR_MAX, buildNodes, containerPaths, defaultExpanded, toJsonText, visibleRows } from "../lib/jsonTree";
 import { visible } from "../safeText";
+import Json from "./JsonPane.jsx";
+
+// The keys that carry the four requirement fields (user, agent, tool, policy decision) in the gateway and Privilege records.
+const ENTRY_HOT = ["Principal", "User", "AgentKey", "Client", "Target", "Decision"];
 
 // The legend for the four requirement fields. Every badge carries its word, never colour alone.
 export function FieldLegend() {
@@ -81,7 +85,7 @@ export default function JsonTree({ value, raw, marks = [], label = "Log entry", 
         <button type="button" onClick={copy} data-testid={`${testId}-copy`}>{isDoc ? "Copy JSON" : "Copy line"}</button>
         <span role="status" aria-live="polite" className="muted" data-testid={`${testId}-copied`}>{copied}</span>
       </div>
-      {showRaw ? <pre className="code jt__raw" data-testid={`${testId}-rawtext`}>{visible(raw ?? toJsonText(value))}</pre> : (
+      {showRaw ? <Json value={raw ?? toJsonText(value)} label={`${label}, original line`} testId={`${testId}-rawtext`} hot={ENTRY_HOT} /> : (
         <div role="tree" aria-label={label} className="jt__tree">
           {rows.map((row, i) => {
             const { node, level, pos, size } = row;

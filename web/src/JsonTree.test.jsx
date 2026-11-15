@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import JsonTree, { FieldLegend } from "./components/JsonTree";
 import LogEntries from "./components/LogEntries";
 import { buildNodes, MAX_DEPTH, MAX_NODES, STR_CAP, visibleRows, defaultExpanded } from "./lib/jsonTree";
 import { parseLogLine } from "./lib/logEntry";
 import { redactText } from "./lib/clipboard";
+import { setJsonView } from "./components/JsonPane.jsx";
 
 afterEach(cleanup);
 const entry = { time: "2026-11-07T10:00:00Z", level: "info", n: 42, ok: true, gone: null, nested: { a: [1, "two"] }, msg: "Access token found for user: u-1, client: lab-agent-key" };
@@ -102,6 +103,22 @@ describe("JsonTree component", () => {
     expect(screen.getByTestId("entry-raw")).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByTestId("entry-raw"));
     expect(screen.getByRole("tree")).toBeInTheDocument();
+  });
+
+  it("the Raw view of a JSON record goes through the shared JSON pane: Form | JSON, the line exactly as given in JSON, the entry's own fields stood out", async () => {
+    const user = userEvent.setup();
+    const line = '{"Event":"policy_decision","Decision":"allow","AgentKey":"lab-agent-key","Data":{"App":"demo"}}';
+    render(<JsonTree value={JSON.parse(line)} raw={line} />);
+    await user.click(screen.getByTestId("entry-raw"));
+    const box = screen.getByTestId("entry-rawtext-box");
+    expect(within(box).getByRole("button", { name: "Form" })).toBeInTheDocument();
+    setJsonView("raw");
+    await waitFor(() => expect(screen.getByTestId("entry-rawtext")).toHaveTextContent(line)); // exact text, not re-serialized
+    expect(screen.getByTestId("entry-rawtext").querySelector(".jtok--hot")).not.toBeNull(); // AgentKey / Decision are hot here
+    await user.click(within(box).getByRole("button", { name: "Form" }));
+    expect(screen.getByTestId("entry-rawtext")).toHaveTextContent("lab-agent-key");
+    expect(screen.getByTestId("entry-rawtext").querySelector('[data-hot="true"]')).not.toBeNull();
+    setJsonView("raw");
   });
 
   it("Copy JSON copies the entry as redacted JSON and says so", async () => {
