@@ -273,3 +273,13 @@ server-side guard after repeated network drops). Note the times from
 `grep "Delete request recieved" /Library/Logs/Procyon/procyon-agent*.log` and raise it with
  whoever administers the Privilege tenant — re-approving treats the symptom; the deletes have
  to stop for it to stay fixed.
+
+---
+
+## Real mode: through the PingOne Privilege gateway
+
+**Privilege objects this lab uses:** the gateway door `hostile-mcp/mcp` (`PRIV_LOG_GATEWAY_URL`) with agent key `PRIV_LOG_AGENT_KEY`, plus the Privilege console API for the decision log
+
+Settings keys: `PRIV_LOG_GW_URL`, `PRIV_LOG_GW_APPS`, at least one `PRIV_LOG_GW_KEY_<NAME>`
+in the shared settings file (`~/Development/.env`, or the file `STANDALONE_ENV` names). The key
+is write-only: it is scrubbed from every message, error and log line.
