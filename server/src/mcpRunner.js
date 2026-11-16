@@ -106,6 +106,7 @@ export async function runMcp({ client, gatewayUrl, key, bearer, c, trace, marker
   const embedded = marker ? rpcWithMarker(c, marker) : { rpc: rpcFor(c), where: null };
   const hops = [];
   let session = null;
+  let pending = null; // the request being sent: kept so a call that never answers (held for approval) can still be shown
   const send = async (label, body, extra = {}) => {
     const span = trace.span();
     const headers = {
@@ -113,10 +114,12 @@ export async function runMcp({ client, gatewayUrl, key, bearer, c, trace, marker
       traceparent: formatTraceparent(trace.traceId, span), ...(auth ? { authorization: auth } : {}), ...(session ? { 'mcp-session-id': session } : {}),
     };
     const text = JSON.stringify(body);
+    const shown = { method: 'POST', url: endpoint, headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, client.redact(v)])), body: client.redact(text) };
+    pending = { label, request: shown };
     const res = await client.request({ url: endpoint, method: 'POST', headers, body: text });
     const hop = {
       n: hops.length + 1, label, from: 'lab', to: 'gateway', traceparent: headers.traceparent,
-      request: { method: 'POST', url: endpoint, headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, client.redact(v)])), body: client.redact(text) },
+      request: shown,
       response: { status: res.status, headers: res.headers, body: res.text, truncated: res.truncated, ms: res.ms, redirect: res.redirect },
       ...extra,
     };
@@ -146,7 +149,7 @@ export async function runMcp({ client, gatewayUrl, key, bearer, c, trace, marker
         try { last = (await send(c.request.method, embedded.rpc)).res; } catch (e) {
           // A call held for human approval may not answer within the time cap: that is a result, not a failure. The log is still read.
           if (!(c.heldCall && e instanceof RealError && e.code === 'timeout')) throw e;
-          return { ...summarise({ status: null, headers: {}, text: '' }), outcome: { http: null, isError: false, note: 'no answer within the time cap: a call held for approval waits for the approver. The log is still read.' } };
+          return { ...summarise({ status: null, headers: {}, text: '' }), pending, outcome: { http: null, isError: false, note: 'no answer within the time cap: a call held for approval waits for the approver. The log is still read.' } };
         }
       }
     }

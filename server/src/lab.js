@@ -9,6 +9,7 @@ import { MINTED_CASE } from './fedIssuer.js';
 import { redactLine } from './redact.js';
 import { readSource, sourcesFrom } from './logSources.js';
 import { RealError } from './realClient.js';
+import { mockExchanges, realExchanges } from './privilegeTrace.js';
 import { SINK_KIND, kindOf } from './eventKind.js';
 
 // Console or runtime per line: the line's own kind when the reader decided it, else the sink's kind, else unknown.
@@ -84,7 +85,7 @@ export function mockRun(c, capture, { rand = randomBytes } = {}) {
     request: c.request, wire, outcome: c.outcome, response: { http: c.outcome.http, note: c.outcome.note },
     logged: c.logged.map(withKinds), marks: marksFor(c.logged, ctx), score: c.score, scoreNotes: c.scoreNotes,
     recomputed: { score: r.score, diff: diffScores(c.score, r.score) }, scored: true, needsPaste: false,
-    traceId: trace.traceId,
+    traceId: trace.traceId, exchanges: mockExchanges(c, { recordedOn: capture.capturedOn, traceparent: formatTraceparent(trace.traceId, b) }),
     hops: [
       { n: 1, from: 'browser', to: 'lab', label: 'The page asks the lab to replay the case', traceparent: formatTraceparent(trace.traceId, a), request: `POST /api/run {"caseId":"${c.id}"}\ntraceparent: ${formatTraceparent(trace.traceId, a)}`, response: `200 OK: recorded response and ${c.logged.reduce((n, l) => n + l.lines.length, 0)} recorded log line(s)` },
       { n: 2, from: 'lab', to: 'replay', label: 'The lab reads the recorded transaction (in-process, no network)', traceparent: formatTraceparent(trace.traceId, b), request: wire ? `would send (NOT sent): ${JSON.stringify(wire)}` : `case request (NOT sent): ${JSON.stringify(c.request)}`, response: `recorded HTTP ${c.outcome.http}: ${c.outcome.note}` },
@@ -132,7 +133,7 @@ export async function realSend(c, { client, cfg, bearer, now = Date.now, rand = 
     // A console action: nothing is sent. The lab looks for what the log source recorded since the time given.
     const t = now();
     const from = since ?? t - 15 * 60_000;
-    return { ...base, ranAt: new Date(t).toISOString(), wire: null, outcome: { http: null, isError: false, note: 'console action: nothing was sent' }, response: { http: null, note: 'console action: nothing was sent' },
+    return { ...base, exchanges: [], ranAt: new Date(t).toISOString(), wire: null, outcome: { http: null, isError: false, note: 'console action: nothing was sent' }, response: { http: null, note: 'console action: nothing was sent' },
       marker: null, markerWhere: null, timing: { sentAt: t, receivedAt: t, since: from }, hops: [], needsPaste: !sources.length,
       retrieval: sources.length ? retrieval({ state: 'pending', startedAt: t, detail: `Looking for entries since ${new Date(from).toISOString()}.` }) : { state: 'not_configured', phase: 'none', detail: NOT_CONFIGURED, sources: [] } };
   }
@@ -143,7 +144,7 @@ export async function realSend(c, { client, cfg, bearer, now = Date.now, rand = 
   const logged = [];
   if (mcp.auditHeader) logged.push(withKinds({ source: 'response', lines: [mcp.auditHeader], methods: ['response'], note: 'X-Gw-Audit-Trail header as returned to the caller (UNVERIFIED format).', origin: { live: true, system: 'Gateway response header', where: 'X-Gw-Audit-Trail, returned to the caller (not stored)' } }));
   return {
-    ...base, ranAt: new Date(t1).toISOString(), wire: mcpWire(c, marker), outcome: mcp.outcome, response: { http: mcp.outcome.http, note: mcp.outcome.note }, logged,
+    ...base, exchanges: realExchanges(mcp, c, { at: new Date(t1).toISOString() }), ranAt: new Date(t1).toISOString(), wire: mcpWire(c, marker), outcome: mcp.outcome, response: { http: mcp.outcome.http, note: mcp.outcome.note }, logged,
     marker, markerWhere: mcp.markerWhere, timing: { sentAt: t0, receivedAt: t1, since: null }, hops: mcp.hops.map((h, i) => textHop(h, i + 1)), needsPaste: !sources.length,
     retrieval: sources.length ? retrieval({ state: 'pending', startedAt: now(), detail: 'Request sent. Looking for the log entry.' }) : { state: 'not_configured', phase: 'none', detail: NOT_CONFIGURED, sources: [] },
   };
