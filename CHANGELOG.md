@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (verification mark)
+
+- Verification mark in the header: the shared `VerifyMark` (vendored from AI-DEMO-Standalone `shared/verify-mark`, byte for byte, pinned) shows this lab's Verified / In progress mark from the demo shelf, inside the top menu beside the Shelf link. It reads the same `GET /api/shelf` call the Shelf link makes, so it shows through the lab-proxy and nothing when the lab is opened on its own port, when the shelf has no mark for it, or when the shelf is unreachable.
+
 ## Unreleased (Requirement 9 tab)
 
 - Requirement 9 tab (`#req9`): the customer's audit clause (a user, b agent, c tool, d decision) mapped onto Privilege's own `policy-decision-log` and `proxy-audit-log` records over the last 90 days. A ReactFlow relationship view of one selected decision record (values from the record, dashed red where a part is absent, dashed link to the approval hold with the same RequestID), coverage tiles a-d with met / partial chips, a ledger of one example per pattern (held, denied, non-human caller, no agent key, approval released under a new RequestID, plain allowed call) and the three gaps in plain words.

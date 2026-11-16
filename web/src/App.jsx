@@ -5,6 +5,7 @@ import DiagramPage from "./components/DiagramPage";
 import RunPage from "./components/RunPage";
 import ScorecardPage from "./components/ScorecardPage";
 import ShelfLink from "./components/ShelfLink";
+import VerifyMark from "./components/VerifyMark.jsx";
 import SinksPage from "./components/SinksPage";
 import TalkTrack from "./components/TalkTrack";
 import TracePage from "./components/TracePage";
@@ -233,6 +234,7 @@ export default function App() {
             {info === null && <button type="button" onClick={loadInfo} data-testid="mode-retry">Retry mode</button>}
             <button type="button" onClick={refresh} data-testid="refresh" title="Stop any wait for a log entry, free the Run buttons and reload the data. Your runs are kept.">Refresh</button>
             <ShelfLink />
+            <VerifyMark id="privilege-logging-lab" />
           </TopMenu>
         </span>
       </header>
