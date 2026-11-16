@@ -6,9 +6,12 @@ import { Chip, LevelChip } from "./Chips";
 import Busy from "./Busy";
 import LogEntries from "./LogEntries";
 import Json from "./JsonPane.jsx";
+import GatewayTrace from "../gateway-trace/GatewayTrace.jsx";
 
 // Keys that matter in this lab's JSON-RPC calls and answers: which method, which tool, and whether the tool reported an error.
 const RPC_HOT = ["method", "name", "isError"];
+// Mock sends nothing and this lab has no gateway that runs checks, so the panel's default wording about a simulated gateway would be untrue.
+const replayNote = (on) => `Replay of the transaction recorded on ${on}. Nothing is sent now and this lab computes no gateway decision: the request is the call Real would send, the status and note are the recorded outcome, and every decision is read from that outcome (inferred or observed). The recorded log lines are below. Real mode shows the actual gateway.`;
 
 function Score({ result }) {
   if (!result.scored) return <p className="muted" data-testid="unscored">{result.realOnly && result.source === "mock" ? "Not measured." : "Not scored: no log entry has been retrieved for this call."} {result.retrieval?.state === "not_configured" ? "No log source is configured. " : ""}Paste the gateway log lines below and they are scored with the same scorer.</p>;
@@ -100,6 +103,10 @@ export default function TracePage({ cases, runs, sinkInfo, info, caseId, busy = 
               <Score result={result} />
             </section>
           </div>
+
+          {result.exchanges?.length > 0
+            ? <GatewayTrace exchanges={result.exchanges} source={result.source} basisNote={result.source === "mock" ? replayNote(result.recordedOn) : undefined} />
+            : <p className="muted" data-testid="gateway-trace-none">No gateway call to show for this case: nothing was sent, or its route is not measured here (UNVERIFIED).</p>}
 
           <h2 className="section-label">What was logged, per sink</h2>
           <p className="muted" data-testid="kind-legend"><b>Runtime event</b>: something the gateway did with traffic (a call, a policy decision, a guardrail verdict, an approval hold). <b>Console event</b>: an admin change made in the Privilege console. Each entry is labelled.</p>
