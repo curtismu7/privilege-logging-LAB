@@ -14,6 +14,7 @@ import Req9Page from "./components/Req9Page";
 import { confirmGateway, fetchLog, getJson, resetWorkspace, runCase, setBearer, setMode } from "./api";
 import { applyTheme, savedTheme } from "./theme";
 import TopMenu, { applyFontSize } from "./top-menu/TopMenu.jsx";
+import TalkTrackDialog from "./talk-track/TalkTrackDialog.jsx";
 
 const VERSION = (() => { try { return JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version || null; } catch { return null; } })();
 
@@ -52,6 +53,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [nav, setNav] = useState(parseHash());
   const [presenter, setPresenter] = useState(false);
+  const [talkOpen, setTalkOpen] = useState(false);
   const [theme, setTheme] = useState(savedTheme());
   const [fontStep, setFontStep] = useState(() => { try { const f = localStorage.getItem("privlog.font"); return ["S", "M", "L"].includes(f) ? f : "M"; } catch { return "M"; } });
   useEffect(() => { applyFontSize(fontStep); try { localStorage.setItem("privlog.font", fontStep); } catch { /* blocked */ } }, [fontStep]);
@@ -226,6 +228,7 @@ export default function App() {
             theme={{ value: theme, onChange: setTheme }}
             fontSize={{ value: fontStep, onChange: setFontStep }}
             present={{ active: presenter, onToggle: () => setPresenter((v) => !v), label: "Presenter (P)" }}
+          talkTrack={{ active: talkOpen, onToggle: () => setTalkOpen((v) => !v) }}
             shelfUrl="https://local.ping-devops.com:8443/"
             help={{ href: "https://github.com/curtismu7/privilege-logging-LAB#readme" }}
             version={VERSION}
@@ -266,6 +269,8 @@ export default function App() {
           </>
         )}
       </main>
+
+      <TalkTrackDialog isOpen={talkOpen} onClose={() => setTalkOpen(false)} talk={story?.talkTrack ?? []} />
     </div>
   );
 }
