@@ -50,7 +50,7 @@ export default function RunPage({ cases, runs, info, running, busy = {}, gate = 
       {visible.length === 0 && <p className="muted" data-testid="no-cases">No case has all the tags you picked. <button type="button" onClick={() => setPicked(new Set())}>Clear tags</button></p>}
       {cases.groups.filter((g) => visible.some((c) => c.group === g)).map((g) => (
         <section key={g} aria-labelledby={`grp-${g}`}>
-          <h2 id={`grp-${g}`} className="section-label">{g}{cases.cases.find((c) => c.group === g)?.realOnly ? " · not measured yet" : ""}</h2>
+          <h2 id={`grp-${g}`} className="section-label"><span className="step-num" data-n={cases.groups.indexOf(g) + 1} aria-hidden="true"></span>{g}{cases.cases.find((c) => c.group === g)?.realOnly ? " · not measured yet" : ""}</h2>
           <div className="card-grid">
             {visible.filter((c) => c.group === g).map((c) => {
               const r = runs[c.id]; const b = busy[c.id];

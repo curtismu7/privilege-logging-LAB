@@ -28,8 +28,11 @@
 @media (max-width: 600px) { .shell-bar { gap: 0.5rem; padding: 0.5rem 1rem; } .shell-nav { order: 3; flex-basis: 100%; } }
 
 /* Cards (pattern 4) */
-.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 0.75rem; margin: 0.75rem 0; }
-.card-grid--2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.card-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; margin: 0.75rem 0; }
+.card-grid--2 { grid-template-columns: 1fr; }
+.step-num { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.4rem; border-radius: 999px;
+  background: var(--accent-gradient); color: var(--on-accent); font: 700 0.75rem var(--font-mono); margin-right: 0.5em; vertical-align: 2px; }
+.step-num::before { content: attr(data-n); }
 .card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); border-top: 4px solid var(--accent); padding: 0.9rem 1rem; min-width: 0; }
 .card--neutral { border-top-color: var(--border); }
 .card--ok { border-top-color: var(--status-ok); }
