@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Background, BackgroundVariant, BaseEdge, Controls, EdgeLabelRenderer, getBezierPath, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import DiagramStepBar from "./DiagramStepBar";
 import { useDiagramStepper } from "../hooks/useDiagramStepper";
 import { REFIT_EVENT, useFitOnResize } from "../hooks/useFitOnResize";
 import "./PatternDiagram.css";
+import { ArrowNoLabel, EdgeLabels, FitOpen, Passport, PassportActions } from "../diagram-kit/DiagramKit.jsx";
+import { boxPassport, sidePoint } from "../diagram-kit/diagramKit.js";
+import "../diagram-kit/diagram-kit.css";
 
 // Never fit below MIN_ZOOM: at 375 px a full fit went to 0.30 and the 13 px box text rendered at about 4 px. At 0.7 it stays
 // about 9 px; a wide diagram then pans (drag the canvas) or zooms with the controls instead of shrinking out of reading range.
@@ -14,7 +17,7 @@ const HANDLES = [["t", Position.Top], ["b", Position.Bottom], ["l", Position.Lef
 
 function Box({ data }) {
   return (
-    <div className={`pat-node pat-node--${data.kind}${data.on ? " pat-node--on" : ""}`}>
+    <div className={`pat-node pat-node--${data.kind}${data.on ? " pat-node--on" : ""}${data.passport ? " dk-open" : ""}`} data-testid={`pat-node-${data.id}`}>
       {HANDLES.map(([k, pos]) => (
         <span key={k}>
           <Handle id={`s-${k}`} type="source" position={pos} className="pat-handle" />
@@ -23,26 +26,14 @@ function Box({ data }) {
       ))}
       {data.label}
       {data.sub?.map((s, i) => <span key={i} className="pat-node__sub">{s}</span>)}
+      {data.passport && <Passport p={data.passport} />}
     </div>
   );
 }
 const nodeTypes = { box: Box };
 
-// An edge that draws its own label, so a reply along the same pair of boxes can sit above or below its partner
-// instead of on top of it. data.dy is the vertical nudge in pixels.
-function LabelEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, data }) {
-  const [path, lx, ly] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
-  return (
-    <>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} />
-      <EdgeLabelRenderer>
-        <div className={`pat-elabel${data.now ? " pat-elabel--now" : ""}${data.dim ? " pat-elabel--dim" : ""}`} data-testid="edge-label"
-          style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly + data.dy}px)` }}>{data.text}</div>
-      </EdgeLabelRenderer>
-    </>
-  );
-}
-const edgeTypes = { label: LabelEdge };
+// The arrow draws the curve only: every label is drawn by EdgeLabels, above the boxes, placed clear of the other labels and the boxes.
+const edgeTypes = { arrow: ArrowNoLabel };
 
 // Steps that run along the same pair of boxes in opposite directions get opposite nudges (-16 and +16 px).
 export function labelOffsets(steps) {
@@ -67,16 +58,16 @@ function sides(a, b) {
   return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? ["r", "l"] : ["l", "r"]) : (dy > 0 ? ["b", "t"] : ["t", "b"]);
 }
 
-function Canvas({ pattern, positions, onMove, stepper }) {
+function Canvas({ pattern, graph, positions, onMove, stepper, open, setOpen }) {
   const ref = useRef(null);
   const [selected, setSelected] = useState(null);
   useFitOnResize(ref, FIT);
   const onSelect = useCallback((id, on) => setSelected((cur) => (on ? id : cur === id ? null : cur)), []);
   const active = stepper.step >= 0 ? pattern.steps[stepper.step] : null;
   const nodes = pattern.nodes.map((n) => ({
-    id: n.id, type: "box", position: positions[n.id], draggable: true, selected: selected === n.id,
+    id: n.id, type: "box", position: positions[n.id], draggable: true, selected: selected === n.id, zIndex: n.id === open ? 10 : undefined, // an expanded box sits above its neighbours
     ariaLabel: `${n.label}: box. Press Enter to select, then the arrow keys to move it.`,
-    data: { label: n.label, sub: n.sub, kind: n.kind, on: !!active && (active.from === n.id || active.to === n.id) },
+    data: { id: n.id, label: n.label, sub: n.sub, kind: n.kind, on: !!active && (active.from === n.id || active.to === n.id), passport: n.id === open ? boxPassport(graph, n.id) : null },
   }));
   const offs = labelOffsets(pattern.steps);
   const edges = pattern.steps.map((s, i) => {
@@ -87,20 +78,35 @@ function Canvas({ pattern, positions, onMove, stepper }) {
     const now = stepper.step === i;
     const seen = stepper.step >= 0 && i <= stepper.step;
     return {
-      id: `e${i}`, source: s.from, target: s.to, sourceHandle: `s-${a}`, targetHandle: `t-${b}`, type: "label",
-      animated: now, data: { text: `${i + 1}. ${s.edgeLabel || s.label}`, dy: offs[i], now, dim: stepper.step >= 0 && !seen },
+      id: `e${i}`, source: s.from, target: s.to, sourceHandle: `s-${a}`, targetHandle: `t-${b}`, type: "arrow",
+      animated: now,
       className: `pat-edge${cp ? " pat-edge--cp" : ""}${s.dashed ? " pat-edge--none" : ""}${now ? " pat-edge--now" : ""}${stepper.step >= 0 && !seen ? " pat-edge--dim" : ""}`,
       markerEnd: { type: MarkerType.ArrowClosed },
     };
   });
+  // One label per arrow, in a layer above the boxes. A reply along the same pair of boxes starts a little above or below its partner (labelOffsets).
+  const labels = pattern.steps.map((s, i) => ({
+    id: `e${i}`, text: `${i + 1}. ${s.edgeLabel || s.label}`, source: s.from, target: s.to, sourceHandle: edges[i].sourceHandle, targetHandle: edges[i].targetHandle,
+    active: stepper.step === i, dim: stepper.step >= 0 && !(i <= stepper.step), prefer: offs[i],
+  }));
+  // What an expanded box can do: open the box at the far end of an arrow, close itself, and make a link that opens this page with the box expanded.
+  const actions = useMemo(() => ({
+    open: (id) => setOpen(id), close: () => setOpen(null),
+    link: (id) => { const u = new URL(window.location.href); u.searchParams.set("box", id); return u.toString(); },
+  }), [setOpen]);
   return (
     <div ref={ref} className="pat-canvas" data-testid="pattern-canvas">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={FIT} nodesConnectable={false} minZoom={MIN_ZOOM}
-        onNodesChange={(changes) => applyNodeChanges(changes, { onMove, onSelect })}
-        onNodeDragStop={(_, n) => onMove(n.id, n.position)} onNodeDrag={(_, n) => onMove(n.id, n.position)} proOptions={{ hideAttribution: true }}>
-        <Background variant={BackgroundVariant.Dots} gap={18} />
-        <Controls showInteractive={false} />
-      </ReactFlow>
+      <PassportActions.Provider value={actions}>
+        <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView fitViewOptions={FIT} nodesConnectable={false} minZoom={MIN_ZOOM}
+          onNodeClick={(_, n) => setOpen((o) => (o === n.id ? null : n.id))} onPaneClick={() => setOpen(null)}
+          onNodesChange={(changes) => applyNodeChanges(changes, { onMove, onSelect })}
+          onNodeDragStop={(_, n) => onMove(n.id, n.position)} onNodeDrag={(_, n) => onMove(n.id, n.position)} proOptions={{ hideAttribution: true }}>
+          <Background variant={BackgroundVariant.Dots} gap={18} />
+          <Controls showInteractive={false} />
+          <EdgeLabels items={labels} pointFor={(box, handle) => sidePoint(box, String(handle).split("-")[1])} fallback={{ w: 150, h: 56 }} />
+          <FitOpen open={open} closePadding={FIT.padding} />
+        </ReactFlow>
+      </PassportActions.Provider>
     </div>
   );
 }
@@ -111,10 +117,13 @@ export default function PatternDiagram({ pattern, resetSignal = 0, dashedNote = 
   const initial = useMemo(() => Object.fromEntries(pattern.nodes.map((n) => [n.id, { x: n.x, y: n.y }])), [pattern]);
   const [positions, setPositions] = useState(initial);
   const stepper = useDiagramStepper(pattern.steps.length);
+  // The pattern as a graph (boxes and arrows) for the box details; a box's kind is its group.
+  const graph = useMemo(() => ({ nodes: pattern.nodes.map((n) => ({ id: n.id, label: n.label, group: n.kind })), edges: pattern.steps.map((st, i) => ({ source: st.from, target: st.to, label: `${i + 1}. ${st.edgeLabel || st.label}` })) }), [pattern]);
+  const [open, setOpen] = useState(() => { const box = new URLSearchParams(window.location.search).get("box"); return box && pattern.nodes.some((n) => n.id === box) ? box : null; }); // a shared link's box
   const onMove = useCallback((id, p) => setPositions((cur) => ({ ...cur, [id]: { x: p.x, y: p.y } })), []);
   const step = stepper.step >= 0 ? pattern.steps[stepper.step] : null;
   // Reset restores box positions as well as the walkthrough and the view. The page-level Reset raises resetSignal.
-  const reset = useCallback(() => { stepper.stop(); setPositions(initial); setTimeout(() => window.dispatchEvent(new Event(REFIT_EVENT)), 0); }, [stepper.stop, initial]); // eslint-disable-line react-hooks/exhaustive-deps
+  const reset = useCallback(() => { stepper.stop(); setPositions(initial); setOpen(null); setTimeout(() => window.dispatchEvent(new Event(REFIT_EVENT)), 0); }, [stepper.stop, initial]); // eslint-disable-line react-hooks/exhaustive-deps
   const seen = useRef(resetSignal);
   useEffect(() => { if (seen.current !== resetSignal) { seen.current = resetSignal; reset(); } }, [resetSignal, reset]);
   return (
@@ -130,7 +139,7 @@ export default function PatternDiagram({ pattern, resetSignal = 0, dashedNote = 
         </article>
       )}
       <ReactFlowProvider>
-        <Canvas pattern={pattern} positions={positions} onMove={onMove} stepper={stepper} />
+        <Canvas pattern={pattern} graph={graph} positions={positions} onMove={onMove} stepper={stepper} open={open} setOpen={setOpen} />
       </ReactFlowProvider>
       <details className="pat-steps" data-testid="pattern-steps">
         <summary>The steps as text</summary>
