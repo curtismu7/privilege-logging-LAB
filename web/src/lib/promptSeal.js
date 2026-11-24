@@ -2,12 +2,13 @@
 //
 // What this is: HPKE (RFC 9180) base mode with DHKEM(X25519, HKDF-SHA256), HKDF-SHA256 and AES-128-GCM, one encapsulation per
 // record (single-shot seal), through the vetted `@hpke/core` + `@hpke/dhkem-x25519` libraries. Nothing here is hand-written crypto.
-// What this is NOT: Privilege's wire format. The Privilege console says its records are sealed with HPKE (RFC 9180) to an X25519
-// public JWK and carry a key id; the exact suite and record layout are not published to this lab, so this shows the MECHANISM.
+// The sample records the tab seals use this lab's own layout (above). Real Privilege records use a different one, which
+// openPrivilegeRecord() below reads: it follows the derivation in the Privilege console's own browser code and was proven on real
+// records from a live tenant (2026-11-24). It is a reader only; the lab never writes that layout.
 //
 // Everything runs in the browser tab: no network call, the private key is never stored.
 
-import { CipherSuite, Aes128Gcm, HkdfSha256 } from "@hpke/core";
+import { CipherSuite, Aes128Gcm, Aes256Gcm, HkdfSha256 } from "@hpke/core";
 import { DhkemX25519HkdfSha256 } from "@hpke/dhkem-x25519";
 
 export const SUITE = Object.freeze({
@@ -208,4 +209,53 @@ export async function openRecord({ privateKey, record }) {
 export const SIEM_FIELDS = Object.freeze(["requestId", "id", "surface", "kind", "user", "agentKey", "decision", "createdAt", "kid", "bytes", "truncated"]);
 export function siemView(record) {
   return Object.fromEntries(SIEM_FIELDS.filter((k) => k in record).map((k) => [k, record[k]]));
+}
+
+// ---- Real Privilege prompt-log records (read only) -------------------------------------------------------------------------------
+// The layout, as the Privilege console's own decryption code does it:
+//   HPKE RFC 9180 base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM suite id, info "privilege/prompt-log/v1".
+//   The record's `Enc` is the encapsulated key (base64). A 44-byte secret is exported with the context "<RequestID>|<Direction>":
+//   the first 32 bytes are the AES-256-GCM key, the last 12 the nonce, and the same context string is the AAD.
+//   `Content` (base64) is the ciphertext; its plaintext is JSON {"units":[{"role","text"}]}.
+export const PRIVILEGE_ALG = "HPKE-X25519-SHA256-AES256GCM-EXPORT";
+export const PRIVILEGE_INFO = "privilege/prompt-log/v1";
+
+function fromB64(str, what) {
+  if (typeof str !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(str) || str.length === 0) fail("BAD_RECORD", `${what} is missing or is not base64.`);
+  return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+}
+
+/** Finds the prompt-log fields in what was pasted: the bare record, a SIEM event ({Data:{...}}) or an Elasticsearch hit ({_source:{Data}}). */
+export function readPrivilegeRecord(input) {
+  const v = readJson(input, "BAD_RECORD", "the prompt-log record (the JSON of one SIEM event)");
+  const d = v._source?.Data || v.Data || v;
+  if (typeof d.Content !== "string" || typeof d.Enc !== "string") fail("BAD_RECORD", "That has no Content and Enc. Paste one prompt-log event from the SIEM (its Data object, or the whole event).");
+  return { Content: d.Content, Enc: d.Enc, KeyID: d.KeyID || "", Alg: d.Alg || "", RequestID: d.RequestID || "", Direction: d.Direction || "" };
+}
+
+/** Open a real Privilege prompt-log record with a private key from parsePrivateJwk. Returns the readable units. */
+export async function openPrivilegeRecord({ privateKey, record }) {
+  if (!cryptoAvailable()) fail("NO_CRYPTO", "This browser has no Web Crypto (crypto.subtle).");
+  const r = readPrivilegeRecord(record);
+  if (r.Alg && r.Alg !== PRIVILEGE_ALG) fail("UNSUPPORTED_ALG", `This record says its format is "${r.Alg}". This reader handles "${PRIVILEGE_ALG}" only.`);
+  if (r.KeyID && privateKey.kid !== r.KeyID) {
+    fail("KID_MISMATCH", `This record was sealed to key id "${r.KeyID}". The key you gave is "${privateKey.kid}". Find the key with the matching id.`);
+  }
+  const aad = te.encode(`${r.RequestID}|${r.Direction}`);
+  let plain;
+  try {
+    const suite = new CipherSuite({ kem: new DhkemX25519HkdfSha256(), kdf: new HkdfSha256(), aead: new Aes256Gcm() });
+    const sk = await suite.kem.deserializePrivateKey(fromB64u(privateKey.d, "d"));
+    const ctx = await suite.createRecipientContext({ recipientKey: sk, enc: fromB64(r.Enc, "Enc"), info: te.encode(PRIVILEGE_INFO) });
+    const ek = new Uint8Array(await ctx.export(aad, 44));
+    const key = await globalThis.crypto.subtle.importKey("raw", ek.slice(0, 32), "AES-GCM", false, ["decrypt"]);
+    plain = await globalThis.crypto.subtle.decrypt({ name: "AES-GCM", iv: ek.slice(32), additionalData: aad, tagLength: 128 }, key, fromB64(r.Content, "Content"));
+  } catch (e) {
+    if (e instanceof PromptSealError) throw e;
+    return fail("OPEN_FAILED", "The record did not open. Either this is not the right private key for it (the key id can match while the public key the gateway used is a different one), or the RequestID, Direction or content was changed.");
+  }
+  let parsed;
+  try { parsed = JSON.parse(td.decode(new Uint8Array(plain))); } catch { fail("OPEN_FAILED", "The record opened but is not the expected JSON."); }
+  const units = Array.isArray(parsed?.units) ? parsed.units : [];
+  return { units, text: JSON.stringify(parsed, null, 2), direction: r.Direction, requestId: r.RequestID };
 }
