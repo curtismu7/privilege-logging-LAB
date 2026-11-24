@@ -248,7 +248,7 @@ export default function App() {
       <main className="page">
         <div className="banner" role="note" data-testid="banner" data-state={promptsTab ? undefined : info === null ? "unknown" : real ? "live" : undefined}>{banner}</div>
         {/* A disabled Real button is skipped by Tab and shows no tooltip on touch, so its how-to is also on the page. */}
-        {realHint && !presenter && <p className="muted" id="real-hint" data-testid="real-hint">Real is unavailable: {realHint}</p>}
+        {realHint && !presenter && !promptsTab && <p className="muted" id="real-hint" data-testid="real-hint">Real is unavailable: {realHint}</p>}
         <h1 ref={titleRef} tabIndex={-1}>{TITLES[nav.tab]}</h1>
         {nav.tab === "trace" && <p><button type="button" onClick={() => go("run")} data-testid="back-to-run">← Back to Run</button></p>}
         {!presenter && story && nav.tab === "run" && <p className="intro">{story.intro}</p>}
@@ -260,11 +260,10 @@ export default function App() {
           </aside>
         )}
         {!inlineGate && <ConfirmGate gate={gate} onConfirm={onConfirm} onCancel={() => setGate(null)} busy={!!running} />}
-        {error ? <p className="field-error" role="alert">Could not load the lab ({error}). Is the server running?</p> : !story || !cases || !sinkInfo ? <p className="muted">Loading...</p> : (
+        {promptsTab ? <PromptLoggingPage /> : error ? <p className="field-error" role="alert">Could not load the lab ({error}). Is the server running?</p> : !story || !cases || !sinkInfo ? <p className="muted">Loading...</p> : (
           <>
             {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} gate={inlineGate ? gate : null} onConfirm={onConfirm} onCancelGate={() => setGate(null)} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "privilege" && <PrivilegePage info={info} signal={signal} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
-            {nav.tab === "prompts" && <PromptLoggingPage />}
             {nav.tab === "req9" && <Req9Page info={info} signal={signal} rid={nav.rid || null} onSelect={(rid) => go("req9", rid)} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
             {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id], { from: "trace-run" })} onRetry={retry} onChanged={loadRuns} running={running} />}
             {nav.tab === "scorecard" && <ScorecardPage info={info} runsSignal={`${signal}:${Object.keys(runs).length}:${Object.values(runs).map((r) => `${r.ranAt}${r.scored}${r.logged.length}`).join("")}`} onOpen={(id) => go("trace", id)} />}

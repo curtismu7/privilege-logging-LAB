@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  generateKeyPair, parsePublicJwk, parsePrivateJwk, sealRecord, openRecord, siemView, SIEM_FIELDS, truncateUtf8, normalizeMaxBytes,
+  generateKeyPair, AAD_FIELDS, parsePublicJwk, parsePrivateJwk, sealRecord, openRecord, siemView, SIEM_FIELDS, truncateUtf8, normalizeMaxBytes,
   fromB64u, toB64u, jwkThumbprint, DEFAULT_MAX_BYTES, MAX_MAX_BYTES, PromptSealError, SUITE,
 } from "./promptSeal";
 
@@ -97,13 +97,25 @@ describe("4. tampering", () => {
     const raw = fromB64u(rec.enc); raw[5] ^= 1;
     await failsWith(openRecord({ privateKey: await priv(kp), record: { ...rec, enc: toB64u(raw) } }), "OPEN_FAILED");
   });
-  it.each(["requestId", "surface", "kind", "id"])("changing the readable %s (bound as AAD) fails", async (field) => {
-    const { kp, rec } = await sealed();
-    await failsWith(openRecord({ privateKey: await priv(kp), record: { ...rec, [field]: `${rec[field]}-changed` } }), "OPEN_FAILED");
+  const mutate = (v) => (typeof v === "boolean" ? !v : typeof v === "number" ? v + 1 : `${v}-changed`);
+  it.each(AAD_FIELDS.filter((f) => f !== "kid"))("changing the readable %s (bound as AAD) fails to open", async (field) => {
+    const kp = await generateKeyPair();
+    const rec = await sealRecord({ publicKey: await pub(kp), content: "0123456789", meta, maxBytes: 4 }); // a truncated record, so every field has a value
+    expect(rec[field], `record has ${field}`).not.toBeUndefined();
+    await failsWith(openRecord({ privateKey: await priv(kp), record: { ...rec, [field]: mutate(rec[field]) } }), "OPEN_FAILED");
   });
-  it("details that are NOT bound (user, decision) can change without breaking the seal, which is why a SIEM must not be trusted for the content", async () => {
+  it("the kid is checked before decrypting, and a changed kid is named rather than failing silently", async () => {
     const { kp, rec } = await sealed();
-    expect((await openRecord({ privateKey: await priv(kp), record: { ...rec, user: "someone-else" } })).text).toBe("do not change me");
+    await failsWith(openRecord({ privateKey: await priv(kp), record: { ...rec, kid: `${rec.kid}-changed` } }), "KID_MISMATCH");
+  });
+  it("a cut record cannot be made to look complete: clearing truncated fails to open", async () => {
+    const kp = await generateKeyPair();
+    const rec = await sealRecord({ publicKey: await pub(kp), content: "0123456789", meta, maxBytes: 4 });
+    await failsWith(openRecord({ privateKey: await priv(kp), record: { ...rec, truncated: false, truncatedBytes: 0 } }), "OPEN_FAILED");
+  });
+  it("fields that are not part of the stored record (a UI flag) do not affect opening", async () => {
+    const { kp, rec } = await sealed();
+    expect((await openRecord({ privateKey: await priv(kp), record: { ...rec, tampered: true } })).text).toBe("do not change me");
   });
   it("a record that is not a record is refused", async () => {
     const kp = await generateKeyPair();

@@ -21,8 +21,8 @@ const pretty = (o) => JSON.stringify(o, null, 2);
 const abbreviate = (record) => ({ ...record, enc: `${record.enc.slice(0, 12)}… (${fromB64u(record.enc).length} bytes)`, ciphertext: `${record.ciphertext.slice(0, 16)}… (${fromB64u(record.ciphertext).length} bytes)` });
 const message = (e) => (e instanceof PromptSealError ? { code: e.code, text: e.message } : { code: "ERROR", text: "Something went wrong. Reload the page and try again." });
 
-async function copy(text, setNote) {
-  try { await navigator.clipboard.writeText(text); setNote("Copied."); } catch { setNote("Copy is blocked here: select the text and copy it yourself."); }
+async function copy(text, where, setNote) {
+  try { await navigator.clipboard.writeText(text); setNote({ where, text: "Copied." }); } catch { setNote({ where, text: "Copy is blocked here: select the text and copy it yourself." }); }
 }
 
 export default function PromptLoggingPage() {
@@ -39,7 +39,7 @@ export default function PromptLoggingPage() {
   const [privateText, setPrivateText] = useState("");
   const [opened, setOpened] = useState(null); // { text, truncated, truncatedBytes } for the selected record
   const [err, setErr] = useState({ keys: null, seal: null, open: null });
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState({ where: "", text: "" }); // one note, shown only next to the control that set it, cleared by the next action
   const [busy, setBusy] = useState("");
   const busyRef = useRef(false); // a ref, not state: two clicks in the same instant must not both pass
 
@@ -53,9 +53,11 @@ export default function PromptLoggingPage() {
   };
 
   const onGenerate = () => run("generate", async () => {
-    setE("keys", null); setNote("");
+    setE("keys", null); setNote({ where: "", text: "" });
     try {
-      const kp = await generateKeyPair({ kid: kidInput.trim() });
+      const wanted = kidInput.trim();
+      if (wanted && keys.some((k) => k.kid === wanted)) throw new PromptSealError("DUPLICATE_KID", `A key with the id "${wanted}" was already made in this tab. Use a different id, or leave it blank for the key's own thumbprint.`);
+      const kp = await generateKeyPair({ kid: wanted });
       setKeys((k) => [...k, kp]); setFresh(kp); setPublicText(pretty(kp.publicJwk)); setKidInput("");
     } catch (e) { setE("keys", message(e)); }
   });
@@ -63,7 +65,7 @@ export default function PromptLoggingPage() {
   const onSample = (id) => { const s = sampleById(id); setSampleId(id); setContent(s.text); setE("seal", null); };
 
   const onSeal = () => run("seal", async () => {
-    setE("seal", null); setOpened(null); setE("open", null);
+    setE("seal", null); setOpened(null); setE("open", null); setNote({ where: "", text: "" });
     try {
       const publicKey = await parsePublicJwk(publicText);
       const s = sampleById(sampleId);
@@ -73,14 +75,14 @@ export default function PromptLoggingPage() {
   });
 
   const onTamper = () => {
-    if (!selected) return;
+    if (!selected || selected.tampered || selected.ciphertext.length === 0) return; // once: flipping twice would restore the record and leave it labelled tampered
     const raw = fromB64u(selected.ciphertext); raw[0] ^= 1;
     setRecords((r) => r.map((x) => (x.id === selected.id ? { ...x, ciphertext: toB64u(raw), tampered: true } : x)));
     setOpened(null); setE("open", null);
   };
 
   const onUseMatching = () => {
-    const kp = selected && keys.find((k) => k.kid === selected.kid);
+    const kp = selected && [...keys].reverse().find((k) => k.kid === selected.kid); // newest first
     if (kp) { setPrivateText(pretty(kp.privateJwk)); setE("open", null); } else setE("open", { code: "NO_KEY", text: `No key with id "${selected?.kid}" was made in this tab. Paste its private JWK.` });
   };
 
@@ -92,7 +94,7 @@ export default function PromptLoggingPage() {
     } catch (e) { setE("open", message(e)); }
   });
 
-  const onForget = () => { setPrivateText(""); setOpened(null); setE("open", null); setFresh(null); setKeys([]); setNote("Keys forgotten. Records stay sealed."); };
+  const onForget = () => { setPrivateText(""); setOpened(null); setE("open", null); setFresh(null); setKeys([]); setNote({ where: "forget", text: "Keys forgotten. Records stay sealed." }); };
 
   if (!ready) {
     return <div className="notice" role="alert" data-testid="pl-nocrypto">This browser has no Web Crypto (crypto.subtle), which is needed to seal and open records. Open the lab over https or on localhost.</div>;
@@ -116,12 +118,12 @@ export default function PromptLoggingPage() {
         {err.keys && <p className="field-error" role="alert" data-testid="pl-err-keys"><strong>{err.keys.code}</strong> {err.keys.text}</p>}
         <label htmlFor="pl-public">Public key: records are sealed to this one. Paste your own, or use the one just made</label>
         <textarea id="pl-public" rows={6} value={publicText} onChange={(e) => setPublicText(e.target.value)} spellCheck={false} placeholder='{"kty":"OKP","crv":"X25519","kid":"...","x":"..."}' data-testid="pl-public" />
-        <div className="pl-actions"><button type="button" onClick={() => copy(publicText, setNote)} disabled={!publicText}>Copy public key</button><span className="muted" role="status">{note}</span></div>
+        <div className="pl-actions"><button type="button" onClick={() => copy(publicText, "public", setNote)} disabled={!publicText}>Copy public key</button><span className="muted" role="status" data-testid="pl-note-public">{note.where === "public" ? note.text : ""}</span></div>
         {fresh && (
           <div className="pl-fresh" data-testid="pl-fresh">
             <p><Chip kind="warn">DEMO KEY</Chip> <strong>Private key.</strong> Save it now if you will use this key anywhere that matters (a password manager). This page keeps it in memory only and forgets it on reload; Privilege never sees it.</p>
             <pre className="pl-json mono" tabIndex={0} data-testid="pl-private-shown">{pretty(fresh.privateJwk)}</pre>
-            <div className="pl-actions"><button type="button" onClick={() => copy(pretty(fresh.privateJwk), setNote)}>Copy private key</button><button type="button" onClick={() => setFresh(null)}>Hide it</button></div>
+            <div className="pl-actions"><button type="button" onClick={() => copy(pretty(fresh.privateJwk), "private", setNote)}>Copy private key</button><button type="button" onClick={() => setFresh(null)}>Hide it</button><span className="muted" role="status" data-testid="pl-note-private">{note.where === "private" ? `${note.text} It stays on your clipboard until you copy something else.` : ""}</span></div>
           </div>
         )}
         {keys.length > 1 && <p className="muted" data-testid="pl-rotation">{keys.length} keys made in this tab (ids: {keys.map((k) => k.kid.slice(0, 10)).join(", ")}). New records use whatever is in the public key box; older records still need their own key.</p>}
@@ -187,8 +189,9 @@ export default function PromptLoggingPage() {
             <div className="pl-actions">
               <button type="button" className="primary" onClick={onOpen} disabled={!!busy || !privateText.trim()} data-testid="pl-open">Open this record</button>
               <button type="button" onClick={onUseMatching} data-testid="pl-use-key">Use the key made in this tab</button>
-              <button type="button" onClick={onTamper} data-testid="pl-tamper">Flip one byte (simulate tampering)</button>
+              <button type="button" onClick={onTamper} disabled={!!selected.tampered} data-testid="pl-tamper">Flip one byte (simulate tampering)</button>
               <button type="button" onClick={onForget} data-testid="pl-forget">Close and forget the keys</button>
+              <span className="muted" role="status" data-testid="pl-note-forget">{note.where === "forget" ? note.text : ""}</span>
             </div>
             {err.open && <p className="field-error" role="alert" data-testid="pl-err-open"><strong data-testid="pl-err-code">{err.open.code}</strong> {err.open.text}</p>}
             {opened && (

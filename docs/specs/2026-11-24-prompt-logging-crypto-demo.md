@@ -1,6 +1,6 @@
 # Prompt logging: sealed records demo spec
 
-**Status:** draft   **Owner:** Curtis (decides scope and merge)   **Tier:** Tester (unchanged), one new tab in the existing lab
+**Status:** built; independent review findings fixed (AAD coverage, server gating, duplicate key ids, tamper once, note scoping, mode hint)   **Owner:** Curtis (decides scope and merge)   **Tier:** Tester (unchanged), one new tab in the existing lab
 
 ## Goal
 Show what Privilege's **Prompt Logging** setting does, with real cryptography: a prompt or tool call is **sealed to a public key you hold**, the readable details around it stay in the clear, and **only the private key, in the browser, opens it**. A SIEM gets the metadata and the request id, never the content (this is what the Privilege console page itself says; the lab states it as the console's claim and does not verify it, see Out of scope).
@@ -17,14 +17,15 @@ Record prompts and tool calls; record responses as well; surfaces (LLM traffic, 
 ## Acceptance criteria (each a runnable check)
 1. `generateKeyPair()` returns a public JWK `{kty:"OKP", crv:"X25519", x, kid}` with a 32-byte `x` and a private JWK with `d`; `kid` defaults to the RFC 7638 thumbprint; a supplied `kid` is used as given.
 2. Seal then open with the matching private JWK returns the original text (including multi-byte characters); two seals of the same text differ (fresh encapsulation).
-3. Opening with a different private key fails with a named error (`wrong key`), not garbage; the `kid` check catches it before decrypting when the ids differ.
-4. A record with one flipped ciphertext byte, or a changed metadata field bound as AAD (request id, surface, key id), fails to open (`tampered`).
+3. Opening with a different private key fails with a named error, not garbage: `KID_MISMATCH` when the key ids differ (checked before decrypting), `OPEN_FAILED` when a wrong key claims the same id (AES-GCM cannot say whether the key or the record is at fault).
+4. A record with one flipped ciphertext or `enc` byte, or any changed readable field (every field in `AAD_FIELDS`: id, request id, surface, kind, user, agent key, decision, time, size, truncation flags, suite) fails to open (`OPEN_FAILED`); a changed key id is `KID_MISMATCH`; a cut record cannot be made to look complete.
 5. Size limit: content over `maxBytes` is cut at a UTF-8 boundary, `truncated: true`, and `truncatedBytes` says how much; `0` uses 65,536; values above 131,072 are refused; negative or non-integer refused.
 6. Rotation: records sealed under key A and key B coexist; each opens only with its own key; the list says which `kid` each needs.
 7. The SIEM view contains exactly the metadata fields and the request id, and **no** content, ciphertext or enc (asserted by field list, not by eye).
 8. No network call during key generation, sealing or opening (fetch / XHR / sendBeacon spied: 0 calls); the private JWK is not written to storage, URL or console.
-9. UI: banner first; at 375 px no horizontal scroll; dark and light; keyboard reachable; verified in a real browser with a screenshot.
-10. Existing lab tests still pass.
+9. The tab works with the lab server down; a key id used twice in the tab is refused; "Flip one byte" works once; each Copied note shows only beside its own control; the "Real is unavailable" hint is not shown above this tab's banner.
+10. UI: banner first; at 375 px no horizontal scroll; dark and light; keyboard reachable; verified in a real browser with a screenshot.
+11. Existing lab tests still pass.
 
 ## Unhappy paths (each needs a check)
 - Pasted public key is not JSON, wrong `kty`/`crv`, `x` not 32 bytes, or contains `d` (a private key pasted into the public box is refused with a clear message).

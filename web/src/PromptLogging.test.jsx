@@ -208,3 +208,73 @@ describe("Prompt logging tab inside the app", () => {
     expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions/);
   });
 });
+
+describe("Prompt logging tab: review fixes", () => {
+  it("a key id that was already made in this tab is refused", async () => {
+    const user = userEvent.setup();
+    render(<PromptLoggingPage />);
+    await user.type(screen.getByTestId("pl-kid"), "k1"); await generate(user);
+    await user.type(screen.getByTestId("pl-kid"), "k1");
+    await user.click(screen.getByTestId("pl-generate"));
+    expect((await screen.findByTestId("pl-err-keys")).textContent).toMatch(/DUPLICATE_KID/);
+    expect(screen.queryByTestId("pl-rotation")).toBeNull(); // still one key
+    await user.clear(screen.getByTestId("pl-kid")); await user.type(screen.getByTestId("pl-kid"), "k2");
+    await user.click(screen.getByTestId("pl-generate"));
+    await waitFor(() => expect(screen.getByTestId("pl-rotation").textContent).toMatch(/2 keys/));
+  });
+
+  it("Flip one byte works once: the button is disabled afterwards, so the record cannot be flipped back to a valid one while labelled TAMPERED", async () => {
+    const user = userEvent.setup();
+    render(<PromptLoggingPage />);
+    await generate(user); await seal(user);
+    await user.click(screen.getByTestId("pl-tamper"));
+    expect(screen.getByTestId("pl-tamper")).toBeDisabled();
+    await user.click(screen.getByTestId("pl-tamper")); // a second click does nothing
+    await user.click(screen.getByTestId("pl-use-key")); await user.click(screen.getByTestId("pl-open"));
+    expect((await screen.findByTestId("pl-err-code")).textContent).toBe("OPEN_FAILED");
+    expect(recordButtons()[0].textContent).toMatch(/TAMPERED/);
+  });
+
+  it("each Copied note appears only next to its own control and is cleared by the next action", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(<PromptLoggingPage />);
+    await generate(user);
+    await user.click(screen.getByText("Copy private key"));
+    await waitFor(() => expect(screen.getByTestId("pl-note-private").textContent).toMatch(/Copied\. It stays on your clipboard/));
+    expect(screen.getByTestId("pl-note-public").textContent).toBe("");
+    await user.click(screen.getByText("Copy public key"));
+    await waitFor(() => expect(screen.getByTestId("pl-note-public").textContent).toBe("Copied."));
+    expect(screen.getByTestId("pl-note-private").textContent).toBe("");
+    await seal(user); // the next action clears it
+    expect(screen.getByTestId("pl-note-public").textContent).toBe("");
+    expect(writeText).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("Prompt logging tab inside the app: no server needed", () => {
+  it("works with the lab server down: the tab renders and the banner is its own; the other tabs say the lab could not load", async () => {
+    window.location.hash = "#prompts";
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("down")));
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByTestId("pl-page")).toBeInTheDocument();
+    expect(screen.getByTestId("banner").textContent).toBe(BANNER_PROMPTS);
+    await generate(user); await seal(user); // the whole flow runs with no server
+    await user.click(screen.getByTestId("nav-run"));
+    expect(await screen.findByText(/Could not load the lab/)).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("the 'Real is unavailable' hint shows on the other tabs and not above the Prompt logging banner", async () => {
+    lab = await startLab();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByTestId("run-page");
+    expect(screen.getByTestId("real-hint")).toBeInTheDocument();
+    await user.click(screen.getByTestId("nav-prompts"));
+    await screen.findByTestId("pl-page");
+    expect(screen.queryByTestId("real-hint")).toBeNull();
+  });
+});

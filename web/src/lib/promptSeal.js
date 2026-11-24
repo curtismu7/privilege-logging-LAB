@@ -145,8 +145,10 @@ export function truncateUtf8(text, maxBytes) {
 }
 
 const hex = (n) => Array.from(globalThis.crypto.getRandomValues(new Uint8Array(n)), (b) => b.toString(16).padStart(2, "0")).join("");
-// The details that stay readable are bound to the ciphertext as AAD: change one and the record no longer opens.
-const aadFor = (r) => te.encode(JSON.stringify({ v: 1, id: r.id, requestId: r.requestId, surface: r.surface, kind: r.kind, kid: r.kid }));
+// Every readable detail on the record is bound to the ciphertext as AAD, so changing any of them (who, which agent, the decision, the
+// time, the size, the truncation flags, the suite) stops the record opening. Only enc and ciphertext themselves are not bound (they are the sealed part).
+export const AAD_FIELDS = Object.freeze(["id", "requestId", "surface", "kind", "user", "agentKey", "decision", "createdAt", "kid", "bytes", "truncated", "truncatedBytes", "suite"]);
+const aadFor = (r) => te.encode(JSON.stringify({ v: 1, ...Object.fromEntries(AAD_FIELDS.map((k) => [k, r[k]])) }));
 
 /**
  * Seal one record to a public key. `publicKey` comes from parsePublicJwk. `meta` is the readable detail (surface, kind, user,
