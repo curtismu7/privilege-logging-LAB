@@ -2,16 +2,16 @@ import { useMemo, useRef, useState } from "react";
 import { Chip } from "./Chips";
 import { SAMPLES, SURFACES, sampleById } from "../lib/promptSamples";
 import {
-  generateKeyPair, parsePublicJwk, parsePrivateJwk, sealRecord, openRecord, siemView, fromB64u, toB64u,
-  SUITE, DEFAULT_MAX_BYTES, MAX_MAX_BYTES, PromptSealError, cryptoAvailable,
+  generateKeyPair, parsePublicJwk, parsePrivateJwk, sealRecord, openRecord, openPrivilegeRecord, siemView, fromB64u, toB64u,
+  SUITE, PRIVILEGE_ALG, DEFAULT_MAX_BYTES, MAX_MAX_BYTES, PromptSealError, cryptoAvailable,
 } from "../lib/promptSeal";
 import "./PromptLoggingPage.css";
 
 // Prompt logging: sealed to a key you hold. The Privilege console's Prompt Logging page says every recorded prompt, tool call and result is
 // encrypted to a public key (X25519 JWK, HPKE RFC 9180, one encapsulation per record), that Privilege cannot read the records, that only the
 // private key opens them, in the browser, and that a SIEM receives the metadata and the request id, never the content.
-// This page does the cryptography for real (the @hpke libraries) on SAMPLE prompts, entirely in this tab. It is the mechanism, not Privilege's
-// wire format, and it does not read real Privilege records. The private key is held in this tab's memory only.
+// This page does the cryptography for real (the @hpke libraries) on SAMPLE prompts, entirely in this tab, in the lab's own layout. Section 5
+// reads REAL Privilege records (read only, Privilege's own layout: openPrivilegeRecord). Private keys are held in this tab's memory only.
 
 export const BANNER_PROMPTS = "REAL CRYPTOGRAPHY, SAMPLE PROMPTS. Keys are made in this browser tab and records are sealed and opened here. Nothing is sent to Privilege or anywhere else, and the private key is never stored.";
 
@@ -38,9 +38,12 @@ export default function PromptLoggingPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [privateText, setPrivateText] = useState("");
   const [opened, setOpened] = useState(null); // { text, truncated, truncatedBytes } for the selected record
-  const [err, setErr] = useState({ keys: null, seal: null, open: null });
+  const [err, setErr] = useState({ keys: null, seal: null, open: null, real: null });
   const [note, setNote] = useState({ where: "", text: "" }); // one note, shown only next to the control that set it, cleared by the next action
   const [busy, setBusy] = useState("");
+  const [realRecord, setRealRecord] = useState(""); // a real Privilege prompt-log event, pasted
+  const [realPrivate, setRealPrivate] = useState("");
+  const [realOpened, setRealOpened] = useState(null);
   const busyRef = useRef(false); // a ref, not state: two clicks in the same instant must not both pass
 
   const selected = useMemo(() => records.find((r) => r.id === selectedId) || null, [records, selectedId]);
@@ -94,7 +97,15 @@ export default function PromptLoggingPage() {
     } catch (e) { setE("open", message(e)); }
   });
 
-  const onForget = () => { setPrivateText(""); setOpened(null); setE("open", null); setFresh(null); setKeys([]); setNote({ where: "forget", text: "Keys forgotten. Records stay sealed." }); };
+  const onOpenReal = () => run("open-real", async () => {
+    setE("real", null); setRealOpened(null);
+    try {
+      const privateKey = await parsePrivateJwk(realPrivate);
+      setRealOpened(await openPrivilegeRecord({ privateKey, record: realRecord }));
+    } catch (e) { setE("real", message(e)); }
+  });
+
+  const onForget = () => { setRealPrivate(""); setRealOpened(null); setE("real", null); setPrivateText(""); setOpened(null); setE("open", null); setFresh(null); setKeys([]); setNote({ where: "forget", text: "Keys forgotten. Records stay sealed." }); };
 
   if (!ready) {
     return <div className="notice" role="alert" data-testid="pl-nocrypto">This browser has no Web Crypto (crypto.subtle), which is needed to seal and open records. Open the lab over https or on localhost.</div>;
@@ -104,7 +115,7 @@ export default function PromptLoggingPage() {
     <div className="pl" data-testid="pl-page">
       <p className="muted pl-lede">
         The Privilege Prompt Logging page seals every recorded prompt, tool call and result to a public key you hold. Privilege keeps the sealed records and cannot read them. A SIEM receives the details around the record and its request id, never the content.
-        This tab does the sealing for real on sample prompts, so you can see each state. It shows the mechanism ({SUITE.kem}, {SUITE.kdf}, {SUITE.aead}, one encapsulation per record), not Privilege's exact wire format, and it does not read real Privilege records.
+        This tab does the sealing for real on sample prompts, so you can see each state. The samples below use this lab's own sealing layout ({SUITE.kem}, {SUITE.kdf}, {SUITE.aead}), to show the mechanism. Section 5 opens a real record from your tenant, in Privilege's own layout.
       </p>
 
       <section className="card pl-card" aria-labelledby="pl-h-key">
@@ -203,6 +214,28 @@ export default function PromptLoggingPage() {
           </section>
         </>
       )}
+      <section className="card pl-card" aria-labelledby="pl-h-real">
+        <h2 id="pl-h-real" className="card__title">5. Open a real Privilege record</h2>
+        <p className="muted">
+          Paste one <span className="mono">prompt-log</span> event from your SIEM (its <span className="mono">Data</span> object or the whole event) and the private key whose id is in its <span className="mono">KeyID</span>.
+          It opens here, in this tab, with the layout the Privilege console uses (HPKE, <span className="mono">{PRIVILEGE_ALG}</span>); nothing is sent anywhere. A request and its response are separate records, each opened on its own.
+        </p>
+        <label htmlFor="pl-real-record">Prompt-log event (JSON)</label>
+        <textarea id="pl-real-record" rows={6} value={realRecord} onChange={(e) => setRealRecord(e.target.value)} spellCheck={false} placeholder='{"RequestID":"...","Direction":"request","Content":"...","Enc":"...","KeyID":"...","Alg":"..."}' data-testid="pl-real-record" />
+        <label htmlFor="pl-real-private">Private key (JWK)</label>
+        <textarea id="pl-real-private" rows={6} value={realPrivate} onChange={(e) => setRealPrivate(e.target.value)} spellCheck={false} autoComplete="off" placeholder='{"kty":"OKP","crv":"X25519","kid":"...","x":"...","d":"..."}' data-testid="pl-real-private" />
+        <div className="pl-actions">
+          <button type="button" className="primary" onClick={onOpenReal} disabled={!!busy || !realRecord.trim() || !realPrivate.trim()} data-testid="pl-real-open">Open the record</button>
+        </div>
+        {err.real && <p className="field-error" role="alert" data-testid="pl-err-real"><strong data-testid="pl-err-real-code">{err.real.code}</strong> {err.real.text}</p>}
+        {realOpened && (
+          <div className="pl-opened" data-testid="pl-real-opened">
+            <p><Chip kind="ok">OPENED IN THIS TAB</Chip> <span className="muted">{realOpened.direction} {realOpened.requestId}. Not stored anywhere.</span></p>
+            {realOpened.units.map((u, i) => <p key={i} data-testid="pl-real-unit"><span className="muted mono">{u.role || "unit"}</span><br />{u.text}</p>)}
+            <pre className="pl-json mono" tabIndex={0} data-testid="pl-real-json">{realOpened.text}</pre>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

@@ -1,9 +1,11 @@
 // Real cryptography, no mocks: every check runs HPKE through @hpke/core. Spec: docs/specs/2026-11-24-prompt-logging-crypto-demo.md
 import { createHash } from "node:crypto";
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { CipherSuite, HkdfSha256, Aes256Gcm } from "@hpke/core";
+import { DhkemX25519HkdfSha256 } from "@hpke/dhkem-x25519";
 import {
   generateKeyPair, AAD_FIELDS, parsePublicJwk, parsePrivateJwk, sealRecord, openRecord, siemView, SIEM_FIELDS, truncateUtf8, normalizeMaxBytes,
-  fromB64u, toB64u, jwkThumbprint, DEFAULT_MAX_BYTES, MAX_MAX_BYTES, PromptSealError, SUITE,
+  fromB64u, toB64u, jwkThumbprint, openPrivilegeRecord, readPrivilegeRecord, PRIVILEGE_ALG, PRIVILEGE_INFO, DEFAULT_MAX_BYTES, MAX_MAX_BYTES, PromptSealError, SUITE,
 } from "./promptSeal";
 
 const pub = async (kp) => parsePublicJwk(kp.publicJwk);
@@ -239,5 +241,79 @@ describe("8. nothing leaves the page", () => {
     const rec = await sealRecord({ publicKey: await pub(kp), content: "plain text", meta });
     await openRecord({ privateKey: await priv(kp), record: rec });
     for (const s of spies) expect(s).not.toHaveBeenCalled();
+  });
+});
+
+describe("9. real Privilege records (read only)", () => {
+  // Sealed here the way the Privilege console's code expects (a throwaway key, built at run time): HPKE base mode, AES-256-GCM suite id,
+  // info "privilege/prompt-log/v1", 44-byte export with the context "<RequestID>|<Direction>", key = first 32 bytes, nonce = last 12.
+  const b64 = (u) => Buffer.from(u).toString("base64");
+  async function privilegeSeal(kp, { text = "The code word is zebra.", requestId = "13d67ee97e8b0762", direction = "request", role = "user_prompt", ctx } = {}) {
+    const te = new TextEncoder();
+    const kem = new DhkemX25519HkdfSha256();
+    const suite = new CipherSuite({ kem, kdf: new HkdfSha256(), aead: new Aes256Gcm() });
+    const pk = await kem.deserializePublicKey(fromB64u(kp.publicJwk.x));
+    const sender = await suite.createSenderContext({ recipientPublicKey: pk, info: te.encode(PRIVILEGE_INFO) });
+    const aad = te.encode(ctx ?? `${requestId}|${direction}`);
+    const ek = new Uint8Array(await sender.export(aad, 44));
+    const key = await crypto.subtle.importKey("raw", ek.slice(0, 32), "AES-GCM", false, ["encrypt"]);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: ek.slice(32), additionalData: aad, tagLength: 128 }, key, te.encode(JSON.stringify({ units: [{ role, text }] }))));
+    return { RequestID: requestId, Direction: direction, Content: b64(ct), Enc: b64(sender.enc), KeyID: kp.kid, Alg: PRIVILEGE_ALG, Bytes: text.length };
+  }
+
+  it("opens a record in the real layout and returns its units", async () => {
+    const kp = await generateKeyPair({ kid: "tenant-key-1" });
+    const out = await openPrivilegeRecord({ privateKey: await priv(kp), record: await privilegeSeal(kp) });
+    expect(out.units).toEqual([{ role: "user_prompt", text: "The code word is zebra." }]);
+    expect(out.direction).toBe("request");
+  });
+  it("accepts a whole SIEM event or an Elasticsearch hit as well as the bare record, from a string too", async () => {
+    const kp = await generateKeyPair();
+    const rec = await privilegeSeal(kp, { direction: "response", role: "prompt_result", text: "OK" });
+    for (const wrapped of [rec, { Index: "prompt-log", Data: rec }, { _source: { Index: "prompt-log", Data: rec } }, JSON.stringify({ Data: rec })]) {
+      expect((await openPrivilegeRecord({ privateKey: await priv(kp), record: wrapped })).units[0].text).toBe("OK");
+    }
+  });
+  it("opens multi-byte text", async () => {
+    const kp = await generateKeyPair();
+    const out = await openPrivilegeRecord({ privateKey: await priv(kp), record: await privilegeSeal(kp, { text: "café 日本語 😀" }) });
+    expect(out.units[0].text).toBe("café 日本語 😀");
+  });
+  it("names a different key id before decrypting", async () => {
+    const a = await generateKeyPair({ kid: "key-a" }); const b = await generateKeyPair({ kid: "key-b" });
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(b), record: await privilegeSeal(a) }), "KID_MISMATCH");
+  });
+  it("fails closed when the key id matches but the public key used was a different one (what a mismatched console key box does)", async () => {
+    const real = await generateKeyPair({ kid: "same-id" }); const other = await generateKeyPair({ kid: "same-id" });
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(real), record: await privilegeSeal(other) }), "OPEN_FAILED");
+  });
+  it("is bound to RequestID and Direction: changing either stops it opening", async () => {
+    const kp = await generateKeyPair();
+    const rec = await privilegeSeal(kp);
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(kp), record: { ...rec, Direction: "response" } }), "OPEN_FAILED");
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(kp), record: { ...rec, RequestID: "0000000000000000" } }), "OPEN_FAILED");
+  });
+  it("fails closed on flipped ciphertext and on a different encapsulated key", async () => {
+    const kp = await generateKeyPair();
+    const rec = await privilegeSeal(kp);
+    const ct = Buffer.from(rec.Content, "base64"); ct[3] ^= 1;
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(kp), record: { ...rec, Content: ct.toString("base64") } }), "OPEN_FAILED");
+    const other = await privilegeSeal(kp, { requestId: "ffffffffffffffff" });
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(kp), record: { ...rec, Enc: other.Enc } }), "OPEN_FAILED");
+  });
+  it("refuses a format it does not know, and input that is not a record", async () => {
+    const kp = await generateKeyPair();
+    const rec = await privilegeSeal(kp);
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(kp), record: { ...rec, Alg: "HPKE-X25519-SHA256-CHACHA" } }), "UNSUPPORTED_ALG");
+    for (const bad of ["", "not json", "[]", {}, { Content: "AAAA" }, { Content: "!!!", Enc: "AAAA" }]) {
+      const e = await openPrivilegeRecord({ privateKey: await priv(kp), record: bad }).then(() => null, (x) => x);
+      expect(e).toBeInstanceOf(PromptSealError);
+      expect(["BAD_RECORD", "OPEN_FAILED"]).toContain(e.code);
+    }
+  });
+  it("a record the demo sealed itself is not read as a Privilege record", async () => {
+    const kp = await generateKeyPair();
+    const own = await sealRecord({ publicKey: await pub(kp), content: "demo", meta });
+    await failsWith(openPrivilegeRecord({ privateKey: await priv(kp), record: own }), "BAD_RECORD");
   });
 });

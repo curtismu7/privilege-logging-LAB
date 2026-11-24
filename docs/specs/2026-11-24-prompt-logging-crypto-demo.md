@@ -35,10 +35,14 @@ Record prompts and tool calls; record responses as well; surfaces (LLM traffic, 
 - Double click on Seal / Open (idempotent, no duplicate records).
 
 ## Out of scope
-Opening **real** Privilege records (no endpoint or record format is available to the lab); reading or writing the tenant's `tenantprofiles` PromptLog settings; the live check of what the SIEM actually receives (a separate test, needs prompt logging switched on with a key; tracked in the Cribl report); the "unencrypted prompt logs to SIEM" item from the 11/20 release (not on the Prompt Logging page).
+Fetching real records from Privilege or the SIEM (the user pastes one event; see the addendum for the read-only opener); reading or writing the tenant's `tenantprofiles` PromptLog settings; the live check of what the SIEM actually receives (a separate test, needs prompt logging switched on with a key; tracked in the Cribl report); the "unencrypted prompt logs to SIEM" item from the 11/20 release (not on the Prompt Logging page).
 
 ## Protected / must not break
 Lab rules: loopback bind, one port, mode toggle semantics, no outbound calls in Mock, write-only secrets, pinned vendored files (`*.sha256` pins), existing tabs and tests, theme tokens only (no purple). No AI attribution.
 
 ## Verification plan
 `vitest` (new lib and component tests) and the lab's full `npm test` on the Air (`air-test`); `npm audit` on the new packages; real-browser run (Playwright or the browser tools) with screenshots at desktop and 375 px, dark and light; `/code-review` on the PR; PR to `curtismu7/privilege-logging-LAB`, then a pin PR in AI-DEMO-Standalone. Merge only after Curtis says go.
+
+## Addendum 2026-11-24: open a real Privilege record (read only)
+Section 5 of the tab opens a pasted `prompt-log` event with a pasted private JWK. Layout (read from the Privilege console's own browser code, then proven on real records from a live tenant): HPKE base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM suite id, info `privilege/prompt-log/v1`; `Enc` (base64) is the encapsulated key; export 44 bytes with context `<RequestID>|<Direction>`; key = first 32 bytes, nonce = last 12, AAD = the same context; `Content` (base64) is the ciphertext of JSON `{"units":[{"role","text"}]}`.
+Checks (promptSeal.test.js, section 9): opens a record sealed in that layout with a throwaway key; accepts a bare record, a SIEM event or an Elasticsearch hit; multi-byte text; a different key id is named before decrypting; same key id but different public key fails closed; changing RequestID or Direction, flipping ciphertext or swapping Enc fails closed; unknown Alg and non-record input are refused; a record the demo sealed itself is not read as a Privilege record. Live proof: two real records (request and response) opened with the tenant key.
