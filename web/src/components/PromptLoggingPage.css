@@ -1,0 +1,31 @@
+/* Prompt logging tab. Theme tokens only (see tokens.css); no literal colours. */
+.pl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; min-width: 0; }
+.pl-lede { max-width: 80ch; margin: 0.25rem 0 0; }
+.pl-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; min-width: 0; }
+.pl-card label { font-size: var(--font-size-sm); color: var(--muted); }
+.pl-card textarea,
+.pl-card select,
+.pl-card input { width: 100%; max-width: 100%; box-sizing: border-box; }
+.pl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+.pl-row input { flex: 1 1 14rem; width: auto; min-width: 0; }
+.pl-row select { flex: 1 1 16rem; width: auto; min-width: 0; text-overflow: ellipsis; }
+.pl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.pl-json { margin: 0; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text);
+  font-size: var(--font-size-2xs); line-height: 1.5; overflow-x: auto; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pl-json:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pl-fresh { border: 1px dashed var(--border); border-radius: 8px; padding: 0.6rem 0.75rem; display: grid; gap: 0.5rem; }
+.pl-fresh p { margin: 0; }
+.pl-list { list-style: none; margin: 0.25rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.pl-rec { width: 100%; text-align: left; display: grid; grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 0.25rem 0.75rem; align-items: center; padding: 0.5rem 0.75rem; }
+.pl-rec > * { min-width: 0; overflow-wrap: anywhere; }
+.pl-chips { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.pl-two { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+.pl-two h3 { margin: 0 0 0.25rem; font-size: var(--font-size-sm); }
+.pl-opened { display: grid; gap: 0.4rem; }
+.pl-opened p { margin: 0; }
+/* The lab's global pressed-button style is solid red; a selected record keeps normal text colours instead (readable in both themes). */
+.pl-rec { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.pl-rec .muted { color: var(--muted); }
+.pl-rec[aria-pressed="true"] { background: var(--surface-2); color: var(--text); border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
+@media (min-width: 860px) { .pl-two { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .pl-rec { grid-template-columns: 1fr; } }

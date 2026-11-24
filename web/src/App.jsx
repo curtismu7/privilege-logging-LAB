@@ -11,6 +11,7 @@ import TalkTrack from "./components/TalkTrack";
 import TracePage from "./components/TracePage";
 import PrivilegePage from "./components/PrivilegePage";
 import Req9Page from "./components/Req9Page";
+import PromptLoggingPage, { BANNER_PROMPTS } from "./components/PromptLoggingPage";
 import { confirmGateway, fetchLog, getJson, resetWorkspace, runCase, setBearer, setMode } from "./api";
 import { applyTheme, savedTheme } from "./theme";
 import TopMenu, { applyFontSize } from "./top-menu/TopMenu.jsx";
@@ -23,12 +24,13 @@ export const TABS = [
   { id: "trace", label: "Trace" },
   { id: "privilege", label: "Privilege -> Elasticsearch" },
   { id: "req9", label: "Requirement 9" },
+  { id: "prompts", label: "Prompt logging" },
   { id: "scorecard", label: "Scorecard" },
   { id: "sinks", label: "Where it's logged" },
   { id: "diagram", label: "Diagram" },
   { id: "talk", label: "Talk track" },
 ];
-const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", privilege: "Privilege -> Elasticsearch: only what Privilege itself logged", req9: "Requirement 9: who called which tool, as whom, and what the policy said", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
+const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", privilege: "Privilege -> Elasticsearch: only what Privilege itself logged", req9: "Requirement 9: who called which tool, as whom, and what the policy said", prompts: "Prompt logging: sealed to a key you hold", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
 // Never blank: until /api/story answers (or if it fails) the banner says the safe thing.
 export const BANNER_UNKNOWN = "SIMULATED. Replay of transactions measured on 2026-11-07; nothing is sent.";
 // /api/info failed: the page does not know the mode, so it must not claim Mock ("nothing is sent") or Real. Runs are disabled.
@@ -211,7 +213,9 @@ export default function App() {
   };
 
   const real = info?.source === "real";
-  const banner = info === null ? BANNER_MODE_UNKNOWN : story ? (real ? story.realBanner : story.banner) : BANNER_UNKNOWN;
+  // The Prompt logging tab needs no server: its own banner says what is real (the cryptography) and what is sample (the prompts).
+  const promptsTab = nav.tab === "prompts";
+  const banner = promptsTab ? BANNER_PROMPTS : info === null ? BANNER_MODE_UNKNOWN : story ? (real ? story.realBanner : story.banner) : BANNER_UNKNOWN;
   const realHint = info && !info.realAvailable && !real ? info.realHint || "Real is not configured. Mock keeps working." : "";
   const say = story && presenter && nav.tab !== "talk" ? story.talkTrack.filter((t) => (story.pageSays[nav.tab] || []).includes(t.id)) : [];
 
@@ -242,7 +246,7 @@ export default function App() {
         </span>
       </header>
       <main className="page">
-        <div className="banner" role="note" data-testid="banner" data-state={info === null ? "unknown" : real ? "live" : undefined}>{banner}</div>
+        <div className="banner" role="note" data-testid="banner" data-state={promptsTab ? undefined : info === null ? "unknown" : real ? "live" : undefined}>{banner}</div>
         {/* A disabled Real button is skipped by Tab and shows no tooltip on touch, so its how-to is also on the page. */}
         {realHint && !presenter && <p className="muted" id="real-hint" data-testid="real-hint">Real is unavailable: {realHint}</p>}
         <h1 ref={titleRef} tabIndex={-1}>{TITLES[nav.tab]}</h1>
@@ -260,6 +264,7 @@ export default function App() {
           <>
             {nav.tab === "run" && <RunPage cases={cases} runs={runs} info={info} running={running} busy={busy} gate={inlineGate ? gate : null} onConfirm={onConfirm} onCancelGate={() => setGate(null)} onRun={onRun} onLook={onLook} onRetry={retry} onBearer={onBearer} onRunAll={onRunAll} onOpen={(id) => go("trace", id)} />}
             {nav.tab === "privilege" && <PrivilegePage info={info} signal={signal} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
+            {nav.tab === "prompts" && <PromptLoggingPage />}
             {nav.tab === "req9" && <Req9Page info={info} signal={signal} rid={nav.rid || null} onSelect={(rid) => go("req9", rid)} onConfirmNeeded={() => info?.real && setGate({ gatewayOrigin: info.real.gatewayOrigin, searchOrigin: info.real.searchOrigin, k8sOrigin: info.real.k8sOrigin, decisionsOrigin: info.real.decisionsOrigin, queue: [] })} />}
             {nav.tab === "trace" && <TracePage cases={cases} runs={runs} sinkInfo={sinkInfo} info={info} caseId={selected} busy={busy} onSelect={(id) => go("trace", id)} onRun={(id) => runList([id], { from: "trace-run" })} onRetry={retry} onChanged={loadRuns} running={running} />}
             {nav.tab === "scorecard" && <ScorecardPage info={info} runsSignal={`${signal}:${Object.keys(runs).length}:${Object.values(runs).map((r) => `${r.ranAt}${r.scored}${r.logged.length}`).join("")}`} onOpen={(id) => go("trace", id)} />}
