@@ -70,7 +70,22 @@ The lab then GETs `/api/v1/namespaces/<ns>/pods/<pod>/log?container=<c>&sinceSec
 6. **Diagram**: one ReactFlow diagram per flow, caller to Privilege gateway to backend with the sinks hanging off the gateway. Drawn from `diagram-studio/1` data (`server/diagrams/*.json`, built from the capture), movable boxes, Simulate, speed control, Reset restores positions.
 7. **Talk track**, presenter mode (`P`), theme picker (auto / light / dark), Reset.
 
+8. **Prompt logging** (`#prompts`): the Privilege Prompt Logging setting with real cryptography on sample prompts (see "Prompt logging tab" below). It has its own banner and needs no server.
+
 A simulation banner is the first element of every page, also in presenter mode.
+
+## Prompt logging tab (real cryptography, sample prompts)
+
+The Privilege console's **Prompt Logging** page says every recorded prompt, tool call and result is **sealed to a public key you hold** (an X25519 JWK, HPKE RFC 9180, one encapsulation per record), that Privilege cannot read the records, that only the private key opens them (in your browser), and that **a SIEM receives the metadata and the request id, never the content**. Its settings are: record prompts and tool calls, record responses as well, surfaces (LLM traffic, MCP tool calls, agent-to-agent, coding agents), a size limit (0 = 65,536 bytes, maximum 131,072) and a key id.
+
+This tab shows that, with the cryptography done for real (`@hpke/core` + `@hpke/dhkem-x25519`, DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM, base mode) on **sample prompts**, entirely in the browser tab:
+
+1. **Your key pair**: generate one (the key id defaults to the RFC 7638 thumbprint, as Privilege does when the key id is left blank) and copy the **public** JWK to paste into Privilege. The private JWK is shown once; save it yourself, because Privilege and this page keep no copy.
+2. **Record a prompt**: pick a sample (or edit the text) and a size limit; the record is sealed. The readable details (request id, surface, kind, user, agent key, decision, time, size, the truncation flags, key id and suite) stay in the clear and every one is bound to the ciphertext, so changing any of them stops the record opening (the tab checks each, and that a cut record cannot be made to look complete).
+3. **Who sees what**: the sealed record next to what a SIEM receives (the metadata and the request id: no content, no ciphertext).
+4. **Open it**: paste the private JWK. A different key id is named before anything is decrypted; a tampered record (try "Flip one byte", once) or a wrong key that claims the same id fails to open, and says it cannot tell which. A key id already used in the tab is refused.
+
+What it is **not**: Privilege's wire format (the suite and record layout are not published to this lab, so it shows the mechanism), a reader of real Privilege records (no endpoint or format is available), or a measurement of what a real SIEM receives (the "SIEM receives" pane applies the console's statement to the record; the live check is a separate test). Nothing is sent anywhere, the private key is held in the tab's memory only (never stored, never in the URL), and the tab works without the server. Spec: `docs/specs/2026-11-24-prompt-logging-crypto-demo.md`.
 
 ## Run it
 
