@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci
-      - run: bash scripts/check-ui-standard.sh
+      - run: STANDALONE_UI_CANONICAL_URL=https://raw.githubusercontent.com/curtismu7/AI-DEMO-Standalone/header-standard-2026-11-24/shared/standalone-ui.css bash scripts/check-ui-standard.sh
       - run: npm test
       - run: npm run build
       - run: PORT=7801 npm run doctor
