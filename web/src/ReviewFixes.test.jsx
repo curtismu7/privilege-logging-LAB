@@ -44,21 +44,23 @@ describe("Real confirm gate", () => {
 });
 
 describe("honest mode when /api/info fails", () => {
-  it("shows MODE UNKNOWN (never the Mock 'nothing is sent' banner), disables Run, offers Retry, and recovers", async () => {
+  it("shows MODE UNKNOWN (never the Mock 'nothing is sent' modal), disables Run, offers Retry, and recovers", async () => {
     lab = await startLab();
     const w = wrapFetch((p) => p.includes("/api/info"));
     const user = userEvent.setup();
     render(<App />);
     await screen.findByTestId("run-page");
-    await waitFor(() => expect(screen.getByTestId("banner").textContent).toBe(BANNER_MODE_UNKNOWN));
-    expect(screen.getByTestId("banner").textContent).not.toMatch(/nothing is sent/);
-    expect(screen.getByTestId("banner")).toHaveAttribute("data-state", "unknown");
+    await waitFor(() => expect(screen.getByTestId("mode-unknown").textContent).toBe(BANNER_MODE_UNKNOWN));
+    expect(screen.getByTestId("mode-unknown").textContent).not.toMatch(/nothing is sent/);
+    expect(screen.getByTestId("mode-unknown")).toHaveAttribute("data-state", "unknown");
+    expect(screen.queryByTestId("mode-modal")).toBeNull(); // no MOCK or REAL while the mode is unknown
     expect(screen.getByTestId("mode").textContent).toBe("Unknown");
     expect(screen.getByTestId("run-mcp-allowed-key")).toBeDisabled();
     expect(screen.getByTestId("run-all")).toBeDisabled();
     w.restore();
     await user.click(screen.getByTestId("mode-retry"));
-    await waitFor(() => expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/));
+    expect((await screen.findByTestId("mode-modal")).textContent).toMatch(/nothing is sent/);
+    expect(screen.queryByTestId("mode-unknown")).toBeNull();
     expect(screen.getByTestId("run-mcp-allowed-key")).not.toBeDisabled();
     expect(screen.queryByTestId("mode-retry")).toBeNull();
   });
@@ -95,6 +97,7 @@ describe("Run page accessibility and focus", () => {
     lab = await startLab();
     render(<App />);
     await screen.findByTestId("run-page");
+    fireEvent.click(await screen.findByTestId("mode-modal-ok")); // the open modal takes focus; closing it leaves focus on <body>, as the test expects
     await waitFor(() => expect(screen.getByTestId("run-all")).not.toBeDisabled());
     // A browser drops focus to <body> when the focused button becomes disabled; jsdom keeps it on the disabled button, so
     // start the run with focus on <body> (a click event without focusing), which is the state the browser ends up in.

@@ -18,6 +18,9 @@ if (typeof globalThis.localStorage?.clear !== "function") {
   });
 }
 
+// The Real-or-mock modal remembers a dismissal in sessionStorage; every test starts with the modal open again.
+afterEach(() => { try { window.sessionStorage.clear(); } catch { /* blocked */ } });
+
 // jsdom has no scrolling; the reel and the step scroll call these.
 Element.prototype.scrollTo = Element.prototype.scrollTo || function scrollTo() {};
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || function scrollIntoView() {};

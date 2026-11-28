@@ -116,14 +116,14 @@ describe("Requirement 9 tab (Mock)", () => {
     expect(rid()).toBe(NEWEST);
   }, 15000);
 
-  it("App: #req9/<RequestID> opens the tab on that record, picking a row moves the hash, the tab shows the banner and the toggle", async () => {
+  it("App: #req9/<RequestID> opens the tab on that record, picking a row moves the hash, the tab shows the toggle and no banner", async () => {
     lab = await startLab();
     window.location.hash = `#req9/${RELEASE}`;
     const user = userEvent.setup();
     render(<App />);
     await screen.findByTestId("req9-page");
     await waitFor(() => expect(rid()).toBe(RELEASE));
-    expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
+    expect(screen.queryByTestId("banner")).toBeNull();
     expect(screen.getByTestId("mode-select")).toBeInTheDocument();
     expect(screen.getByTestId("nav-req9")).toHaveAttribute("aria-current", "page");
     await user.click(within(screen.getByTestId("req9-list")).getAllByTestId("req9-pick-row")[0]);

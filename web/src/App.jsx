@@ -12,6 +12,7 @@ import TracePage from "./components/TracePage";
 import PrivilegePage from "./components/PrivilegePage";
 import Req9Page from "./components/Req9Page";
 import PromptLoggingPage, { BANNER_PROMPTS } from "./components/PromptLoggingPage";
+import ModeModal from "./mode-modal/ModeModal.jsx";
 import { confirmGateway, fetchLog, getJson, resetWorkspace, runCase, setBearer, setMode } from "./api";
 import { applyTheme, savedTheme } from "./theme";
 import TopMenu, { applyFontSize } from "./top-menu/TopMenu.jsx";
@@ -31,8 +32,13 @@ export const TABS = [
   { id: "talk", label: "Talk track" },
 ];
 const TITLES = { run: "Run a use case", trace: "Trace: what was sent and what was logged", privilege: "Privilege -> Elasticsearch: only what Privilege itself logged", req9: "Requirement 9: who called which tool, as whom, and what the policy said", prompts: "Prompt logging: sealed to a key you hold", scorecard: "Scorecard", sinks: "Where it's logged", diagram: "Flow diagrams", talk: "Talk track" };
-// Never blank: until /api/story answers (or if it fails) the banner says the safe thing.
-export const BANNER_UNKNOWN = "SIMULATED. Replay of transactions measured on 2026-11-07; nothing is sent.";
+// The Real-or-mock modal (shared/mode-modal) says what the old simulation banner said. The Mock line takes the capture date from /api/story;
+// if the story never loads, the date is the one the lab ships with (the old fallback banner did the same).
+const FALLBACK_CAPTURED_ON = "2026-11-07";
+export const modeLines = (capturedOn) => ({
+  mock: `Replay of transactions measured on ${capturedOn || FALLBACK_CAPTURED_ON}; nothing is sent. The log lines are recorded samples with placeholders for ids; no gateway, search endpoint or tenant is contacted.`,
+  real: "Owner-run: requests go only to the gateway you configured, and log lines are read only from the sources you configured or lines you paste. Scores come from the lines actually returned; anything not checked is UNVERIFIED.",
+});
 // /api/info failed: the page does not know the mode, so it must not claim Mock ("nothing is sent") or Real. Runs are disabled.
 export const BANNER_MODE_UNKNOWN = "MODE UNKNOWN. The lab's mode could not be read (/api/info failed), so this page cannot say whether a Run is simulated or sent. Runs are disabled until it loads: press Retry.";
 
@@ -215,7 +221,8 @@ export default function App() {
   const real = info?.source === "real";
   // The Prompt logging tab needs no server: its own banner says what is real (the cryptography) and what is sample (the prompts).
   const promptsTab = nav.tab === "prompts";
-  const banner = promptsTab ? BANNER_PROMPTS : info === null ? BANNER_MODE_UNKNOWN : story ? (real ? story.realBanner : story.banner) : BANNER_UNKNOWN;
+  // The modal waits until the mode is known (a failed /api/info is its own alert, below) and the story has answered or failed, so it never shows a guess.
+  const modalReady = !!info && (!!story || !!error);
   const realHint = info && !info.realAvailable && !real ? info.realHint || "Real is not configured. Mock keeps working." : "";
   const say = story && presenter && nav.tab !== "talk" ? story.talkTrack.filter((t) => (story.pageSays[nav.tab] || []).includes(t.id)) : [];
 
@@ -246,7 +253,9 @@ export default function App() {
         </span>
       </header>
       <main className="page">
-        <div className="banner" role="note" data-testid="banner" data-state={promptsTab ? undefined : info === null ? "unknown" : real ? "live" : undefined}>{banner}</div>
+        {promptsTab
+          ? <div className="banner" role="note" data-testid="prompts-banner">{BANNER_PROMPTS}</div>
+          : info === null && <div className="banner" role="alert" data-testid="mode-unknown" data-state="unknown">{BANNER_MODE_UNKNOWN}</div>}
         {/* A disabled Real button is skipped by Tab and shows no tooltip on touch, so its how-to is also on the page. */}
         {realHint && !presenter && !promptsTab && <p className="muted" id="real-hint" data-testid="real-hint">Real is unavailable: {realHint}</p>}
         <h1 ref={titleRef} tabIndex={-1}>{TITLES[nav.tab]}</h1>
@@ -273,6 +282,7 @@ export default function App() {
           </>
         )}
       </main>
+      <ModeModal mode={real ? "real" : "mock"} lines={modeLines(story?.capturedOn)} suppress={!modalReady} storageKey="plog-mode" />
 
       <TalkTrackDialog isOpen={talkOpen} onClose={() => setTalkOpen(false)} talk={story?.talkTrack ?? []} />
     </div>

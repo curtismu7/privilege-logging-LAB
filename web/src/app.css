@@ -97,7 +97,7 @@ details { margin: 0.4rem 0; } summary { cursor: pointer; font-weight: 600; font-
 .presenter-say p { margin: 0.3rem 0; line-height: 1.5; }
 button[aria-pressed="true"]:hover:not(:disabled), button[aria-selected="true"]:hover { background: var(--accent-deep); color: var(--on-accent); }
 
-/* Presenter mode: less chrome, bigger type. The simulation banner stays. */
+/* Presenter mode: less chrome, bigger type. */
 .app--presenter { font-size: 1.15rem; }
 .app--presenter .card p, .app--presenter .kv, .app--presenter .tbl { font-size: 1rem; }
 .app--presenter .page h1 { font-size: 1.9rem; }
