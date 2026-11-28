@@ -97,6 +97,7 @@ describe("Run page accessibility and focus", () => {
     lab = await startLab();
     render(<App />);
     await screen.findByTestId("run-page");
+    fireEvent.click(await screen.findByTestId("mode-modal-ok")); // the open modal takes focus; closing it leaves focus on <body>, as the test expects
     await waitFor(() => expect(screen.getByTestId("run-all")).not.toBeDisabled());
     // A browser drops focus to <body> when the focused button becomes disabled; jsdom keeps it on the disabled button, so
     // start the run with focus on <body> (a click event without focusing), which is the state the browser ends up in.
