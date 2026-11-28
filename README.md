@@ -20,7 +20,7 @@ Open it: <http://127.0.0.1:7801/>
 | | Mock | Real (owner-run) |
 | --- | --- | --- |
 | What it does | Replays 17 transactions **measured on 2026-11-07**. 3 of the 5 log sinks were read (gateway pod log, Elasticsearch, OpenSearch); the response header and the console were not, so they are UNVERIFIED. Nothing is sent. | Sends the case to **your** gateway over MCP streamable HTTP (initialize, notifications/initialized, then the call, with `Mcp-Session-Id`), `traceparent` on every hop, then **fetches the log entry for that call by itself**. |
-| Progress | Same two phases as Real, with a short fixed simulated delay: "Sending..." then "Fetching the log entry (simulated delay)...", then the recorded entry. The banner still says it is a replay. | A spinner (role=status, aria-busy, reduced-motion aware): "Sending..." then "Fetching the log entry...", retrying about once a second for up to 15 s and stopping as soon as the entry is found. Failures are explicit with a Retry: "Log source not reachable", "No entry found within 15 s". |
+| Progress | Same two phases as Real, with a short fixed simulated delay: "Sending..." then "Fetching the log entry (simulated delay)...", then the recorded entry. The Mock modal still says it is a replay. | A spinner (role=status, aria-busy, reduced-motion aware): "Sending..." then "Fetching the log entry...", retrying about once a second for up to 15 s and stopping as soon as the entry is found. Failures are explicit with a Retry: "Log source not reachable", "No entry found within 15 s". |
 | Network | None. A netguard blocks every non-loopback socket, DNS lookup and fetch, with a self-test and a test that asserts zero attempts. | Only the origins you configure (gateway, log source): https, or http on loopback. No redirects followed, 8 s and 256 KB (1 MB for pod logs) caps, SSRF guard, a confirm gate before the first send. |
 | Log source | The recorded sample lines. | A Kubernetes pod log through `kubectl proxy`, and/or a search endpoint (Elasticsearch/OpenSearch `_search`). With neither configured, Real says so and the **paste box** is the fallback. |
 | Score | The recorded assessment (the scorer is re-run on the samples and any difference is shown). | Computed by the scorer from the entry actually retrieved. No entry, no score. |
@@ -72,7 +72,7 @@ The lab then GETs `/api/v1/namespaces/<ns>/pods/<pod>/log?container=<c>&sinceSec
 
 8. **Prompt logging** (`#prompts`): the Privilege Prompt Logging setting with real cryptography on sample prompts (see "Prompt logging tab" below). It has its own banner and needs no server.
 
-A simulation banner is the first element of every page, also in presenter mode.
+The app opens on a MOCK or REAL modal (shared `mode-modal`) that says what is replayed or owner-run; the header mode badge stays in presenter mode.
 
 ## Prompt logging tab (real cryptography, sample prompts)
 

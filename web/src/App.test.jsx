@@ -26,11 +26,15 @@ describe("lib", () => {
 });
 
 describe("Mock mode", () => {
-  it("shows the replay banner on every page, the toggle with Real disabled and a how-to tooltip, and replays a case with marked lines", async () => {
+  it("opens on the MOCK modal with the replay line, has no banner on any page, shows the toggle with Real disabled and a how-to tooltip, and replays a case with marked lines", async () => {
     lab = await startLab();
     const user = userEvent.setup();
     render(<App />);
-    expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
+    const modal = await screen.findByTestId("mode-modal");
+    expect(modal).toHaveAttribute("data-mode", "mock");
+    expect(modal.textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
+    await user.click(screen.getByTestId("mode-modal-ok"));
+    expect(screen.queryByTestId("mode-modal")).toBeNull();
     await screen.findByTestId("run-page");
     expect(screen.getByTestId("mode-select")).toHaveValue("mock");
     const real = screen.getByTestId("mode-select").querySelector('option[value="real"]');
@@ -38,7 +42,8 @@ describe("Mock mode", () => {
     expect(real.getAttribute("title")).toMatch(/PRIV_LOG_GATEWAY_URL/);
     for (const tab of ["trace", "privilege", "req9", "scorecard", "sinks", "diagram", "talk", "run"]) {
       await user.click(screen.getByTestId(`nav-${tab}`));
-      expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
+      expect(screen.queryByTestId("banner")).toBeNull();
+      expect(screen.queryByTestId("mode-modal")).toBeNull();
     }
     await screen.findByTestId("run-page");
     await user.click(screen.getByTestId("run-mcp-allowed-key"));
@@ -158,7 +163,7 @@ describe("Mock mode", () => {
     await user.selectOptions(screen.getByTestId("priv-index"), "aiguard-log");
     await user.selectOptions(screen.getByTestId("priv-kind"), "console");
     expect(await screen.findByTestId("priv-empty")).toBeInTheDocument();
-    expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
+    expect(screen.queryByTestId("banner")).toBeNull();
   });
 
   it("Refresh reloads the data and keeps this tab's runs (unlike Reset)", async () => {
@@ -288,13 +293,13 @@ describe("Mock mode", () => {
     await waitFor(() => expect(screen.getByText(/LLM call through the gateway/)).toBeInTheDocument());
   });
 
-  it("presenter mode keeps the banner and adds the talk track aside; Escape leaves it", async () => {
+  it("presenter mode keeps the header mode badge and adds the talk track aside; Escape leaves it", async () => {
     lab = await startLab();
     const user = userEvent.setup();
     render(<App />);
     await screen.findByTestId("run-page");
     await user.click(screen.getByTestId("presenter"));
-    expect(screen.getByTestId("banner")).toBeInTheDocument();
+    expect(screen.getByTestId("mode").textContent).toBe("Mock");
     expect(await screen.findByTestId("presenter-say")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByTestId("presenter-say")).toBeNull());
@@ -335,8 +340,10 @@ describe("Real mode (against a fake gateway)", () => {
       await screen.findByTestId("run-page");
       // default is Real when configured
       await waitFor(() => expect(screen.getByTestId("mode-select")).toHaveValue("real"));
-      expect(screen.getByTestId("banner")).toHaveAttribute("data-state", "live");
-      expect(screen.getByTestId("banner").textContent).toMatch(/REAL \(owner-run\)/);
+      const realModal = await screen.findByTestId("mode-modal");
+      expect(realModal).toHaveAttribute("data-mode", "real");
+      expect(realModal.textContent).toMatch(/Owner-run: requests go only to the gateway you configured/);
+      expect(screen.queryByTestId("banner")).toBeNull();
       expect(screen.getByTestId("note-llm-allowed").textContent).toMatch(/Not runnable in Real/);
       expect(screen.getByTestId("ident-mcp-allowed-user").textContent).toMatch(/agent key/);
       expect(screen.getByTestId("run-llm-allowed")).toBeDisabled();
@@ -366,7 +373,8 @@ describe("Real mode (against a fake gateway)", () => {
       // switch to Mock and back: data reloads (the Real run disappears from the Run page, then Mock replays)
       await user.selectOptions(screen.getByTestId("mode-select"), "mock");
       await waitFor(() => expect(screen.getByTestId("mode-select")).toHaveValue("mock"));
-      expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions/);
+      expect((await screen.findByTestId("mode-modal")).textContent).toMatch(/Replay of transactions/);
+      expect(screen.getByTestId("mode-modal")).toHaveAttribute("data-mode", "mock");
       await user.click(screen.getByTestId("nav-run"));
       await waitFor(() => expect(screen.queryByTestId("open-mcp-allowed-key")).toBeNull());
       await user.selectOptions(screen.getByTestId("mode-select"), "real");
@@ -419,7 +427,7 @@ const confirmAndRun = async (user, id) => {
 };
 
 describe("Run progress and automatic log retrieval", () => {
-  it("Mock shows the same two phases (a short simulated delay), keeps the replay banner, stays on the Run page, and Open trace shows the recorded entry", async () => {
+  it("Mock shows the same two phases (a short simulated delay), keeps the Mock modal text, stays on the Run page, and Open trace shows the recorded entry", async () => {
     lab = await startLab({ opts: { mockDelayMs: 500 } });
     const user = userEvent.setup();
     render(<App />);
@@ -430,7 +438,7 @@ describe("Run progress and automatic log retrieval", () => {
     expect(screen.getByTestId("case-mcp-allowed-key")).toHaveAttribute("aria-busy", "true");
     expect(busy.querySelector(".spinner")).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId("busy-mcp-allowed-key").textContent).toMatch(/Fetching the log entry \(simulated delay\)/), { timeout: 3000 });
-    expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
+    expect(screen.getByTestId("mode-modal").textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
     expect(screen.getByTestId("run-mcp-allowed-key")).toBeDisabled();
     await waitFor(() => expect(screen.getByTestId("run-mcp-allowed-key")).not.toBeDisabled(), { timeout: 5000 });
     expect(screen.getByTestId("run-page")).toBeInTheDocument();
@@ -439,7 +447,7 @@ describe("Run progress and automatic log retrieval", () => {
     await openTrace(user, "mcp-allowed-key");
     await screen.findByTestId("lines-gateway-log", {}, { timeout: 5000 });
     expect(screen.getByTestId("retrieval").textContent).toMatch(/recording/);
-    expect(screen.getByTestId("banner").textContent).toMatch(/nothing is sent/);
+    expect(screen.getByTestId("mode-modal").textContent).toMatch(/nothing is sent/);
   });
 
   it("Real: Sending... then Fetching the log entry... then Open trace shows the entry matched by the run marker", async () => {

@@ -192,20 +192,23 @@ describe("Prompt logging tab: nothing leaves the page", () => {
 });
 
 describe("Prompt logging tab inside the app", () => {
-  it("is a tab, with its own honest banner (real cryptography, sample prompts) and the other tabs keep theirs", async () => {
+  it("is a tab, with its own honest banner (real cryptography, sample prompts) that no other tab shows; the mode modal is the other tabs' label", async () => {
     expect(TABS.map((t) => t.id)).toContain("prompts");
     lab = await startLab();
     const user = userEvent.setup();
     render(<App />);
     await screen.findByTestId("run-page");
-    expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
+    expect((await screen.findByTestId("mode-modal")).textContent).toMatch(/Replay of transactions measured on 2026-11-07; nothing is sent\./);
+    expect(screen.queryByTestId("prompts-banner")).toBeNull();
     await user.click(screen.getByTestId("nav-prompts"));
     expect(await screen.findByTestId("pl-page")).toBeInTheDocument();
-    expect(screen.getByTestId("banner").textContent).toBe(BANNER_PROMPTS);
+    expect(screen.getByTestId("prompts-banner").textContent).toBe(BANNER_PROMPTS);
+    expect(screen.queryByTestId("banner")).toBeNull();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/Prompt logging/);
     expect(window.location.hash).toBe("#prompts");
     await user.click(screen.getByTestId("nav-run"));
-    expect(screen.getByTestId("banner").textContent).toMatch(/Replay of transactions/);
+    expect(screen.queryByTestId("prompts-banner")).toBeNull();
+    expect(screen.getByTestId("mode-modal").textContent).toMatch(/Replay of transactions/);
   });
 });
 
@@ -260,7 +263,8 @@ describe("Prompt logging tab inside the app: no server needed", () => {
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByTestId("pl-page")).toBeInTheDocument();
-    expect(screen.getByTestId("banner").textContent).toBe(BANNER_PROMPTS);
+    expect(screen.getByTestId("prompts-banner").textContent).toBe(BANNER_PROMPTS);
+    expect(screen.queryByTestId("mode-modal")).toBeNull(); // the mode is unknown with no server, so there is no MOCK or REAL to say
     await generate(user); await seal(user); // the whole flow runs with no server
     await user.click(screen.getByTestId("nav-run"));
     expect(await screen.findByText(/Could not load the lab/)).toBeInTheDocument();

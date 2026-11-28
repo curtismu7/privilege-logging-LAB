@@ -20,6 +20,9 @@ const [which = 'all', baseArg] = process.argv.slice(2);
 const BASE = (baseArg || 'http://127.0.0.1:7801/').replace(/\/?$/, '/');
 const evidence = []; let failed = 0;
 const shot = async (p, name, opts = {}) => { const f = path.join(OUT, `${name}.png`); await p.screenshot({ path: f, ...opts }); if (KEEP.has(name)) { fs.mkdirSync(EVIDENCE, { recursive: true }); fs.copyFileSync(f, path.join(EVIDENCE, `${name}.png`)); } };
+// The Real-or-mock modal (shared/mode-modal) remembers "Got it" per mode in sessionStorage; every context that clicks the page starts with both dismissed,
+// and one fresh context per mode proves the modal itself.
+const PRE_DISMISS = () => { try { sessionStorage.setItem('plog-mode-seen-mock', '1'); sessionStorage.setItem('plog-mode-seen-real', '1'); } catch { /* blocked */ } };
 const check = (name, ok, detail = '') => { evidence.push({ name, ok: !!ok, detail }); if (!ok) failed += 1; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `: ${detail}` : ''}`); };
 
 async function launch() {
@@ -99,15 +102,28 @@ async function mockProof(browser) {
   const health = createHealth({ intervalMs: 3_600_000 }); await health.ready;
   const app = await startHttpServer({ port: 0, host: '127.0.0.1', app: createApp({ health, env: { STANDALONE_ENV: '/nonexistent' }, useSettingsFile: false, mockDelayMs: 600 }) });
   const BASE = `${app.url}/`;
+  { // the modal itself, in a fresh context: MOCK, Got it closes it, a same-session reload does not reopen it, and there is no banner
+    const mctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const mp = await mctx.newPage();
+    await mp.goto(BASE); await mp.waitForSelector('[data-testid=mode-modal]');
+    check('mock: a fresh load opens the modal on MOCK with the replay line', (await mp.getAttribute('[data-testid=mode-modal]', 'data-mode')) === 'mock' && /Replay of transactions measured on 2026-11-07; nothing is sent\./.test(await mp.textContent('[data-testid=mode-modal]')));
+    await shot(mp, 'mock-modal');
+    await mp.click('[data-testid=mode-modal-ok]');
+    check('mock: Got it closes the modal', (await mp.locator('[data-testid=mode-modal]').count()) === 0);
+    await mp.reload(); await mp.waitForSelector('[data-testid=run-page]'); await mp.waitForTimeout(300);
+    check('mock: a same-session reload shows no modal and no banner', (await mp.locator('[data-testid=mode-modal]').count()) === 0 && (await mp.locator('[data-testid=banner]').count()) === 0);
+    await mctx.close();
+  }
   for (const theme of ['light', 'dark']) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: theme });
+    await ctx.addInitScript(PRE_DISMISS);
     const p = await ctx.newPage();
     const errs = []; p.on('pageerror', (e) => errs.push(String(e))); p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
     p.on('request', (r) => reqs.add(new URL(r.url()).origin));
     await p.goto(BASE); await p.waitForSelector('[data-testid=run-page]');
     await p.selectOption('[data-testid=theme-select]', theme);
     check(`mock/${theme}: data-theme applied`, await p.evaluate(() => document.documentElement.getAttribute('data-theme')) === theme);
-    check(`mock/${theme}: banner says replay and nothing is sent`, /Replay of transactions measured on 2026-11-07; nothing is sent\./.test(await p.textContent('[data-testid=banner]')));
+    check(`mock/${theme}: no simulation banner (the modal replaced it)`, (await p.locator('[data-testid=banner]').count()) === 0);
     // The shared TopMenu: the Real option carries disabled + the how-to title; the mode is the select's value.
     check(`mock/${theme}: Mock selected, Real disabled with a how-to tooltip`, (await p.inputValue('[data-testid=mode-select]')) === 'mock' && await p.isDisabled('[data-testid=mode-real]') && /PRIV_LOG_GATEWAY_URL/.test(await p.getAttribute('[data-testid=mode-real]', 'title')));
     const info = await p.evaluate(async () => (await fetch('/api/info')).json()); // the page's fetch carries the workspace id
@@ -126,7 +142,7 @@ async function mockProof(browser) {
     check(`mock/${theme}: spinner is role=status, aria-busy on the case, and reaches "Fetching the log entry"`, phase1 === 'status' && (await p.getAttribute('[data-testid=case-mcp-allowed-key]', 'aria-busy')) === 'true');
     await shot(p, `mock-${theme}-spinner`);
     await p.waitForSelector('[data-testid=open-mcp-allowed-key]', { timeout: 15000 });
-    check(`mock/${theme}: Run stays on the Run page, the card did not move on screen, and the banner still says replay`, (await p.locator('[data-testid=run-page]').count()) === 1 && (await p.locator('[data-testid=trace-page]').count()) === 0 && Math.abs((await cardTop()) - y0) < 2 && /nothing is sent/.test(await p.textContent('[data-testid=banner]')));
+    check(`mock/${theme}: Run stays on the Run page, the card did not move on screen, and there is still no banner`, (await p.locator('[data-testid=run-page]').count()) === 1 && (await p.locator('[data-testid=trace-page]').count()) === 0 && Math.abs((await cardTop()) - y0) < 2 && (await p.locator('[data-testid=banner]').count()) === 0);
     await p.click('[data-testid=run-all]');
     await p.waitForSelector('[data-testid=open-intent-encoder-unreachable]', { timeout: 60000 });
     check(`mock/${theme}: Run all replayed 17 cases (the 17 not-yet-measured are not run)`, (await p.locator('[data-testid^=open-]').count()) === 17);
@@ -189,7 +205,7 @@ async function mockProof(browser) {
     check(`mock/${theme}: Simulate highlights an arrow`, (await p.locator('[data-testid=pattern-now]').count()) === 1);
     await p.screenshot({ path: path.join(OUT, `mock-${theme}-diagram.png`), fullPage: true });
     await p.click('[data-testid=presenter]');
-    check(`mock/${theme}: presenter mode keeps the banner`, await p.isVisible('[data-testid=banner]') && await p.isVisible('[data-testid=presenter-say]'));
+    check(`mock/${theme}: presenter mode keeps the header mode badge`, await p.isVisible('[data-testid=mode]') && await p.isVisible('[data-testid=presenter-say]'));
     await p.keyboard.press('Escape');
     // the two 409s are the deliberate probes (Real unconfigured, real-only case in Mock); the browser logs refused requests as console errors
     const unexpected = errs.filter((e) => !/status of 409/.test(e));
@@ -198,9 +214,10 @@ async function mockProof(browser) {
   }
   // 375px
   const ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, colorScheme: 'dark' });
+  await ctx.addInitScript(PRE_DISMISS);
   const p = await ctx.newPage();
   for (const tab of ['run', 'trace', 'req9', 'scorecard', 'sinks', 'diagram', 'talk']) {
-    await p.goto(`${BASE}#${tab}`); await p.waitForSelector('[data-testid=banner]'); await p.waitForTimeout(300);
+    await p.goto(`${BASE}#${tab}`); await p.waitForFunction(() => document.querySelector('[data-testid=mode]')?.textContent === 'Mock'); await p.waitForTimeout(300);
     const w = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     check(`375px ${tab}: no horizontal page scroll`, w.sw <= w.iw, `${w.sw} <= ${w.iw}`);
     if (tab === 'run' || tab === 'scorecard') await p.screenshot({ path: path.join(OUT, `mock-375-${tab}.png`) });
@@ -220,11 +237,23 @@ async function realProof(browser) {
   const health = createHealth({ intervalMs: 3_600_000 }); await health.ready;
   const env = { STANDALONE_ENV: '/nonexistent', PRIV_LOG_GATEWAY_URL: gw.url, PRIV_LOG_AGENT_KEY: KEY, PRIV_LOG_K8S_PROXY_URL: k8s.base, PRIV_LOG_K8S_NAMESPACE: 'privilege', PRIV_LOG_K8S_POD: 'gateway-abc' };
   const app = await startHttpServer({ port: 0, host: '127.0.0.1', app: createApp({ health, env, useSettingsFile: false, retryMs: 400, maxMs: 2500, fallbackMs: 1500, mockDelayMs: 600 }) });
+  { // the modal itself, in a fresh context: REAL with the owner-run line, Got it closes it, a same-session reload does not reopen it
+    const rctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light' });
+    const rp = await rctx.newPage();
+    await rp.goto(app.url); await rp.waitForSelector('[data-testid=mode-modal]');
+    check('real: a fresh load opens the modal on REAL with the owner-run line', (await rp.getAttribute('[data-testid=mode-modal]', 'data-mode')) === 'real' && /Owner-run: requests go only to the gateway you configured/.test(await rp.textContent('[data-testid=mode-modal]')));
+    await shot(rp, 'real-modal');
+    await rp.click('[data-testid=mode-modal-ok]');
+    await rp.reload(); await rp.waitForSelector('[data-testid=run-page]'); await rp.waitForTimeout(300);
+    check('real: a same-session reload shows no modal and no banner', (await rp.locator('[data-testid=mode-modal]').count()) === 0 && (await rp.locator('[data-testid=banner]').count()) === 0);
+    await rctx.close();
+  }
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light' });
+  await ctx.addInitScript(PRE_DISMISS);
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(app.url); await p.waitForSelector('[data-testid=run-page]');
-  check('real: default mode is Real when configured, banner is live and says owner-run', (await p.inputValue('[data-testid=mode-select]')) === 'real' && /REAL \(owner-run\)/.test(await p.textContent('[data-testid=banner]')) && (await p.getAttribute('[data-testid=banner]', 'data-state')) === 'live');
+  check('real: default mode is Real when configured and there is no simulation banner', (await p.inputValue('[data-testid=mode-select]')) === 'real' && (await p.locator('[data-testid=banner]').count()) === 0);
   await shot(p, 'real-run');
   await p.locator('[data-testid=case-mcp-allowed-key]').scrollIntoViewIfNeeded(); await p.evaluate(() => window.scrollBy(0, 300));
   const yRun = await p.evaluate(() => window.scrollY);
@@ -285,7 +314,7 @@ async function realProof(browser) {
   await p.waitForSelector('[data-testid=lines-gateway-log]', { timeout: 15000 });
   check('real->mock: switching back replays offline (the fake gateway saw no new request)', gw.requests.length === sent);
   await p.selectOption('[data-testid=mode-select]', 'real'); await p.waitForFunction(() => document.querySelector('[data-testid=mode-select]').value === 'real');
-  check('mock->real: switching again works without a reload', (await p.textContent('[data-testid=banner]')).includes('REAL (owner-run)'));
+  check('mock->real: switching again works without a reload', (await p.inputValue('[data-testid=mode-select]')) === 'real' && (await p.locator('[data-testid=banner]').count()) === 0);
   check('real: no page errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
   await new Promise((r) => app.server.close(r)); health.stop(); await gw.close();
